@@ -25,13 +25,13 @@ Tests use temporary configuration files. The scheme sets `APPTOGGLE_TESTING=1` i
 
 ## Assign an app
 
-Open **AppToggle → Settings…** from the menu bar, choose an installed `.app`, and click **Record Shortcut…**. Press a key with Command, Control, or Option, then release the key to save. Escape, Cancel, closing settings, or switching away from AppToggle cancels recording. AppToggle suspends its own shortcuts during recording and restores them afterward.
+Open **AppToggle → Settings…** from the menu bar, click **Add App…**, and choose an installed `.app`. Click its **Record shortcut** field, press a key with Command, Control, or Option, then release the key to save. Escape, the field's cancel icon, closing settings, or switching away from AppToggle cancels recording. AppToggle suspends its own shortcuts during recording and restores them afterward.
 
-Use **Change Shortcut…** beside an assignment to edit it. A rejected replacement keeps the previous assignment. Errors appear in settings and the menu bar; a failed startup registration leaves the assignment visible for correction. Choosing the same shortcut again retries its registration.
+Click an assignment's shortcut field to edit it. The field shows a focus outline while recording. A rejected replacement keeps the previous assignment. Errors appear in settings and the menu bar; a failed startup registration leaves the assignment visible for correction. Choosing the same shortcut again retries its registration.
 
-**Delete Shortcut** removes the app–shortcut pairing and releases its global shortcut. If saving fails, the assignment stays usable. If macOS cannot release a deleted shortcut, AppToggle reports the cleanup error; use **Reload Saved Assignments** to retry.
+The **trash button** removes the app–shortcut pairing and releases its global shortcut. If saving fails, the assignment stays usable. If macOS cannot release a deleted shortcut, AppToggle reports the cleanup error; use **Reload Saved Assignments** to retry.
 
-Assignments target the installed copy you selected, identified by its file URL and bundle identifier. If that copy moves or disappears, use **Choose App…** beside the assignment to select it again and record its shortcut. AppToggle will not silently launch another installed copy. You can add more than one assignment; each shortcut must be unique within AppToggle.
+Assignments target the installed copy you selected, identified by its file URL and bundle identifier. If that copy moves or disappears, click the app's name or icon to select it again and record its shortcut. AppToggle will not silently launch another installed copy. You can add more than one assignment; each shortcut must be unique within AppToggle.
 
 Configuration lives at `~/Library/Application Support/AppToggle/assignments.json`. Writes replace the file atomically. A failed read blocks saving to protect the existing file; correct the reported file problem and use **Reload Saved Assignments**. A failed write leaves the previous saved assignment intact.
 

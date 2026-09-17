@@ -20,7 +20,7 @@ final class AssignmentFlow {
     private var pendingCleanup = Set<UUID>()
     private var inFlight = Set<UUID>()
     private var pendingShortcut: Shortcut?
-    private var replacingID: UUID?
+    private(set) var replacingID: UUID?
     private var canSave = false
 
     init(store: AssignmentStore, hotkeys: any HotkeyRegistry, workspace: any AppWorkspace) {
