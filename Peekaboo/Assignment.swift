@@ -35,7 +35,7 @@ struct Shortcut: Codable, Equatable, Sendable {
         guard keyCode <= 127, modifiers & ~allowed == 0,
               modifiers & UInt32(cmdKey | controlKey | optionKey) != 0,
               !keyLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw AppToggleError("Use a key with Command, Control, or Option. Escape cancels recording.")
+            throw PeekabooError("Use a key with Command, Control, or Option. Escape cancels recording.")
         }
     }
 
@@ -82,7 +82,7 @@ struct Shortcut: Codable, Equatable, Sendable {
             } else {
                 let characters = event.characters(byApplyingModifiers: []) ?? ""
                 guard !characters.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
-                    throw AppToggleError("This key has no displayable shortcut label. Choose another key.")
+                    throw PeekabooError("This key has no displayable shortcut label. Choose another key.")
                 }
                 keyLabel = characters.uppercased()
             }
@@ -91,7 +91,7 @@ struct Shortcut: Codable, Equatable, Sendable {
     }
 }
 
-struct AppToggleError: LocalizedError {
+struct PeekabooError: LocalizedError {
     let message: String
 
     init(_ message: String) { self.message = message }

@@ -81,11 +81,11 @@ final class NativeWorkspace: NSObject, AppWorkspace {
               !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let executable = bundle.executableURL,
               FileManager.default.isExecutableFile(atPath: executable.path) else {
-            throw AppToggleError("Choose an installed .app with a valid executable and bundle identifier.")
+            throw PeekabooError("Choose an installed .app with a valid executable and bundle identifier.")
         }
         guard identifier != Bundle.main.bundleIdentifier,
               bundle.object(forInfoDictionaryKey: "LSBackgroundOnly") as? Bool != true else {
-            throw AppToggleError("Choose an app with a user interface, rather than AppToggle or a background-only utility.")
+            throw PeekabooError("Choose an app with a user interface, rather than Peekaboo or a background-only utility.")
         }
         let displayName = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
@@ -101,7 +101,7 @@ final class NativeWorkspace: NSObject, AppWorkspace {
             !$0.isTerminated && $0.bundleURL?.resolvingSymlinksInPath().standardizedFileURL == app.url
         }
         guard matches.count <= 1 else {
-            throw AppToggleError("Multiple instances of \(app.name) are running from the selected copy. Quit the extra instance and try again.")
+            throw PeekabooError("Multiple instances of \(app.name) are running from the selected copy. Quit the extra instance and try again.")
         }
         return matches.first.map { tracker(for: $0) }
     }
@@ -121,10 +121,10 @@ final class NativeWorkspace: NSObject, AppWorkspace {
         do {
             let installed = try selectApplication(at: app.url)
             guard installed.bundleIdentifier == app.bundleIdentifier else {
-                throw AppToggleError("The bundle identifier has changed.")
+                throw PeekabooError("The bundle identifier has changed.")
             }
         } catch {
-            throw AppToggleError("Cannot use \(app.name) at \(app.url.path). Select the app again. \(error.localizedDescription)")
+            throw PeekabooError("Cannot use \(app.name) at \(app.url.path). Select the app again. \(error.localizedDescription)")
         }
     }
 }

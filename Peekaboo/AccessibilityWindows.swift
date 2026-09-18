@@ -39,7 +39,7 @@ final class AccessibilityWindows {
         try start()
         _ = try readWindows()
         guard let window = knownWindows.first(where: { $0.id == id }) else {
-            throw AppToggleError("The selected window has closed. Try the shortcut again.")
+            throw PeekabooError("The selected window has closed. Try the shortcut again.")
         }
         try check(AXUIElementSetAttributeValue(window.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse),
                   operation: "restore the selected window")
@@ -62,7 +62,7 @@ final class AccessibilityWindows {
             guard let index = knownWindows.firstIndex(where: { CFEqual($0.element, focused) }),
                   try !isMinimized(focused) else { return }
             guard nextFocusOrder < UInt64.max else {
-                throw AppToggleError("Window focus tracking is exhausted. Restart AppToggle.")
+                throw PeekabooError("Window focus tracking is exhausted. Restart Peekaboo.")
             }
             nextFocusOrder += 1
             knownWindows[index].focusOrder = nextFocusOrder
@@ -88,7 +88,7 @@ final class AccessibilityWindows {
 
     private func start() throws {
         guard AXIsProcessTrustedWithOptions(nil) else {
-            throw AppToggleError("Allow AppToggle in System Settings → Privacy & Security → Accessibility to restore minimized windows.")
+            throw PeekabooError("Allow Peekaboo in System Settings → Privacy & Security → Accessibility to restore minimized windows.")
         }
         guard observer == nil else { return }
         try check(AXUIElementSetMessagingTimeout(appElement, 0.25), operation: "set up window access")
@@ -101,7 +101,7 @@ final class AccessibilityWindows {
         }, &newObserver)
         try check(creation, operation: "track window focus")
         guard let newObserver else {
-            throw AppToggleError("macOS did not create a window focus observer.")
+            throw PeekabooError("macOS did not create a window focus observer.")
         }
         let callback = WindowFocusCallback { [weak self] in
             guard let self, self.observer != nil else { return }
@@ -124,7 +124,7 @@ final class AccessibilityWindows {
     private func readWindows() throws -> [AppWindow] {
         guard let value = try attribute(kAXWindowsAttribute, of: appElement),
               let values = value as? [AnyObject] else {
-            throw AppToggleError("The app returned an invalid window list.")
+            throw PeekabooError("The app returned an invalid window list.")
         }
         var current: [Window] = []
         var result: [AppWindow] = []
@@ -145,7 +145,7 @@ final class AccessibilityWindows {
     private func isMinimized(_ window: AXUIElement) throws -> Bool {
         guard let value = try attribute(kAXMinimizedAttribute, of: window),
               CFGetTypeID(value) == CFBooleanGetTypeID(), let minimized = value as? Bool else {
-            throw AppToggleError("The app returned an invalid minimized-window state.")
+            throw PeekabooError("The app returned an invalid minimized-window state.")
         }
         return minimized
     }
@@ -160,7 +160,7 @@ final class AccessibilityWindows {
 
     private func element(_ value: CFTypeRef) throws -> AXUIElement {
         guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
-            throw AppToggleError("The app returned an invalid Accessibility window.")
+            throw PeekabooError("The app returned an invalid Accessibility window.")
         }
         let element = unsafeDowncast(value, to: AXUIElement.self)
         try check(AXUIElementSetMessagingTimeout(element, 0.25), operation: "set up window access")
@@ -170,6 +170,6 @@ final class AccessibilityWindows {
     private func check(_ status: AXError, operation: String) throws {
         guard status != .success else { return }
         let name = application.localizedName ?? "the app"
-        throw AppToggleError("AppToggle could not \(operation) for \(name) (Accessibility error \(status.rawValue)).")
+        throw PeekabooError("Peekaboo could not \(operation) for \(name) (Accessibility error \(status.rawValue)).")
     }
 }

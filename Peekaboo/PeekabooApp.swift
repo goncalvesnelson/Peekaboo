@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct AppToggleApp: App {
+struct PeekabooApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
@@ -15,11 +15,18 @@ struct AppToggleApp: App {
                 Text("A shortcut is unavailable. Open Settings to correct it.")
             }
             Divider()
-            Button("Quit AppToggle") { NSApplication.shared.terminate(nil) }
+            Button("Quit Peekaboo") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         } label: {
-            Label("AppToggle", systemImage: delegate.flow.errorMessage == nil && delegate.flow.registrationErrors.isEmpty
-                  ? "rectangle.on.rectangle" : "exclamationmark.triangle")
+            Label {
+                Text("Peekaboo")
+            } icon: {
+                if delegate.flow.errorMessage == nil && delegate.flow.registrationErrors.isEmpty {
+                    Image("MenuBarIcon").renderingMode(.template)
+                } else {
+                    Image(systemName: "exclamationmark.triangle")
+                }
+            }
         }
         Settings {
             SettingsView(flow: delegate.flow)
@@ -33,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     lazy var flow = AssignmentFlow(store: AssignmentStore(), hotkeys: hotkeys, workspace: NativeWorkspace())
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        guard ProcessInfo.processInfo.environment["APPTOGGLE_TESTING"] != "1" else { return }
+        guard ProcessInfo.processInfo.environment["PEEKABOO_TESTING"] != "1" else { return }
         flow.load()
     }
 
@@ -44,7 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             let alert = NSAlert()
             alert.messageText = "Shortcut cleanup failed"
-            alert.informativeText = "\(error.localizedDescription) macOS will release this process’s shortcuts when AppToggle quits."
+            alert.informativeText = "\(error.localizedDescription) macOS will release this process’s shortcuts when Peekaboo quits."
             alert.addButton(withTitle: "Quit")
             alert.runModal()
         }

@@ -27,7 +27,7 @@ final class CarbonHotkeys: HotkeyRegistry {
         try shortcut.validate()
         try installHandler()
         guard nextID < UInt32.max else {
-            throw AppToggleError("The shortcut registration IDs are exhausted. Restart AppToggle.")
+            throw PeekabooError("The shortcut registration IDs are exhausted. Restart Peekaboo.")
         }
         let nativeID = nextID
         nextID += 1
@@ -38,7 +38,7 @@ final class CarbonHotkeys: HotkeyRegistry {
             GetApplicationEventTarget(), OptionBits(kEventHotKeyExclusive), &reference
         )
         guard status == noErr, let reference else {
-            throw AppToggleError("macOS could not register \(shortcut.label) (status \(status)). Choose another shortcut.")
+            throw PeekabooError("macOS could not register \(shortcut.label) (status \(status)). Choose another shortcut.")
         }
         let id = UUID()
         registrations[id] = Registration(nativeID: nativeID, reference: reference, action: action)
@@ -49,7 +49,7 @@ final class CarbonHotkeys: HotkeyRegistry {
         guard let entry = registrations[registration] else { return }
         let status = UnregisterEventHotKey(entry.reference)
         guard status == noErr else {
-            throw AppToggleError("macOS could not release a shortcut (status \(status)). Quit and reopen AppToggle if retrying fails.")
+            throw PeekabooError("macOS could not release a shortcut (status \(status)). Quit and reopen Peekaboo if retrying fails.")
         }
         pressed.remove(entry.nativeID)
         registrations.removeValue(forKey: registration)
@@ -72,7 +72,7 @@ final class CarbonHotkeys: HotkeyRegistry {
                 failures.append("macOS could not remove the shortcut handler (status \(status)).")
             }
         }
-        guard failures.isEmpty else { throw AppToggleError(failures.joined(separator: "\n")) }
+        guard failures.isEmpty else { throw PeekabooError(failures.joined(separator: "\n")) }
     }
 
     private func installHandler() throws {
@@ -106,7 +106,7 @@ final class CarbonHotkeys: HotkeyRegistry {
         }, types.count, types, retained.toOpaque(), &handler)
         guard status == noErr else {
             retained.release()
-            throw AppToggleError("macOS could not install the shortcut handler (status \(status)). Restart AppToggle and try again.")
+            throw PeekabooError("macOS could not install the shortcut handler (status \(status)). Restart Peekaboo and try again.")
         }
         context = retained
     }

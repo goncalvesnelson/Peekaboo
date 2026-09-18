@@ -67,7 +67,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("Allow Accessibility to restore minimized windows", systemImage: "macwindow")
                         .font(.callout.weight(.medium))
-                    Text("AppToggle uses window focus to restore only your most recently used minimized window. Enable AppToggle in System Settings → Privacy & Security → Accessibility.")
+                    Text("Peekaboo uses window focus to restore only your most recently used minimized window. Enable Peekaboo in System Settings → Privacy & Security → Accessibility.")
                         .font(.callout).foregroundStyle(.secondary)
                     Button("Allow Accessibility…") { flow.requestAccessibilityAccess() }
                         .disabled(flow.isRecording)
@@ -200,7 +200,7 @@ struct SettingsView: View {
 
     private func chooseApplication(replacing id: UUID? = nil) {
         let panel = NSOpenPanel()
-        panel.title = "Choose an app for AppToggle"
+        panel.title = "Choose an app for Peekaboo"
         panel.prompt = "Choose App"
         panel.allowedContentTypes = [.applicationBundle]
         panel.allowsMultipleSelection = false

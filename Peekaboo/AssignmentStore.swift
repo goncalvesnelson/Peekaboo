@@ -3,6 +3,7 @@ import Foundation
 struct AssignmentStore {
     let url: URL
 
+    // Keep the existing location so renaming the app preserves saved assignments.
     init(url: URL = URL.applicationSupportDirectory.appending(path: "AppToggle/assignments.json")) {
         self.url = url
     }
@@ -23,12 +24,12 @@ struct AssignmentStore {
                       !assignment.app.url.path.isEmpty,
                       !assignment.app.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       !assignment.app.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    throw AppToggleError("The saved assignments contain invalid or duplicate values.")
+                    throw PeekabooError("The saved assignments contain invalid or duplicate values.")
                 }
             }
             return assignments
         } catch {
-            throw AppToggleError("Cannot read assignments at \(url.path): \(error.localizedDescription) Restore or repair this file, then reload assignments.")
+            throw PeekabooError("Cannot read assignments at \(url.path): \(error.localizedDescription) Restore or repair this file, then reload assignments.")
         }
     }
 
@@ -38,7 +39,7 @@ struct AssignmentStore {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: url, options: .atomic)
         } catch {
-            throw AppToggleError("Cannot save assignments at \(url.path): \(error.localizedDescription)")
+            throw PeekabooError("Cannot save assignments at \(url.path): \(error.localizedDescription)")
         }
     }
 }

@@ -1,7 +1,7 @@
 import AppKit
 import Carbon
 import Testing
-@testable import AppToggle
+@testable import Peekaboo
 
 @MainActor
 struct AssignmentFlowTests {
@@ -123,7 +123,7 @@ struct AssignmentFlowTests {
         let running = FakeRunningApp()
         fixture.workspace.running[fixture.app.url] = running
         fixture.workspace.accessibilityGranted = false
-        running.windowError = AppToggleError("Allow Accessibility in Settings.")
+        running.windowError = PeekabooError("Allow Accessibility in Settings.")
         running.isHidden = true
         await flow.trigger(assignment.id)
         #expect(!flow.accessibilityGranted)
@@ -142,7 +142,7 @@ struct AssignmentFlowTests {
         #expect(fixture.workspace.trackedApps == [fixture.app])
 
         running.windowError = nil
-        running.restoreError = AppToggleError("The window no longer exists.")
+        running.restoreError = PeekabooError("The window no longer exists.")
         let minimized = AppWindow(id: UUID(), isMinimized: true, focusOrder: 1)
         running.appWindows = [minimized]
         await flow.trigger(assignment.id)
@@ -528,7 +528,7 @@ struct AssignmentFlowTests {
         try fixture.record(flow)
         let saved = try #require(flow.assignments.first)
         fixture.workspace.holdLaunch = true
-        fixture.workspace.launchError = AppToggleError("The selected app was deleted. Select it again.")
+        fixture.workspace.launchError = PeekabooError("The selected app was deleted. Select it again.")
         let launching = Task { await flow.trigger(saved.id) }
         await fixture.workspace.waitForLaunch()
         let continuation = try #require(fixture.workspace.launchContinuation)
@@ -745,7 +745,7 @@ private final class FakeHotkeys: HotkeyRegistry {
     func register(_ shortcut: Shortcut, action: @escaping @MainActor () -> Void) throws -> UUID {
         guard !rejectedKeys.contains(shortcut.keyCode),
               !registrations.values.contains(where: { $0.shortcut.matches(shortcut) }) else {
-            throw AppToggleError("Shortcut unavailable")
+            throw PeekabooError("Shortcut unavailable")
         }
         let id = UUID()
         registrations[id] = Registration(shortcut: shortcut, action: action)
@@ -753,9 +753,9 @@ private final class FakeHotkeys: HotkeyRegistry {
     }
 
     func unregister(_ registration: UUID) throws {
-        if rejectUnregister { throw AppToggleError("Cannot unregister shortcut") }
+        if rejectUnregister { throw PeekabooError("Cannot unregister shortcut") }
         if let failUnregisterAfter, successfulUnregistrations >= failUnregisterAfter {
-            throw AppToggleError("Cannot unregister shortcut")
+            throw PeekabooError("Cannot unregister shortcut")
         }
         registrations.removeValue(forKey: registration)
         successfulUnregistrations += 1
@@ -770,8 +770,8 @@ private final class FakeRunningApp: RunningApp {
     var refuseActivation = false
     var activationOptions: NSApplication.ActivationOptions = []
     var appWindows = [AppWindow(id: UUID(), isMinimized: false, focusOrder: 1)]
-    var windowError: AppToggleError?
-    var restoreError: AppToggleError?
+    var windowError: PeekabooError?
+    var restoreError: PeekabooError?
 
     func windows() throws -> [AppWindow] {
         if let windowError { throw windowError }
@@ -809,7 +809,7 @@ private final class FakeWorkspace: AppWorkspace {
     var trackedApps: [SelectedApp] = []
     var selections: [URL: SelectedApp] = [:]
     var running: [URL: FakeRunningApp] = [:]
-    var launchError: AppToggleError?
+    var launchError: PeekabooError?
     var launchContinuation: CheckedContinuation<Void, Never>?
     var holdLaunch = false
     var launched: [SelectedApp] = []
@@ -825,7 +825,7 @@ private final class FakeWorkspace: AppWorkspace {
     }
 
     func selectApplication(at url: URL) throws -> SelectedApp {
-        guard let app = selections[url] else { throw AppToggleError("Select an installed application") }
+        guard let app = selections[url] else { throw PeekabooError("Select an installed application") }
         return app
     }
 

@@ -1,13 +1,13 @@
 import AppKit
 import Carbon
 import Testing
-@testable import AppToggle
+@testable import Peekaboo
 
 @Suite(.serialized)
 @MainActor
 struct NativeFlowTests {
     @Test func nativeSelectionAndRegistrationFailurePreserveSavedAssignment() throws {
-        let directory = URL.temporaryDirectory.appending(path: "AppToggle-native-\(UUID().uuidString)")
+        let directory = URL.temporaryDirectory.appending(path: "Peekaboo-native-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let hotkeys = CarbonHotkeys()
         defer {

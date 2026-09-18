@@ -182,7 +182,7 @@ final class AssignmentFlow {
             do { windows = try running.windows() }
             catch { windowError = error }
             if running.isActive && (windows == nil || windows?.contains(where: { !$0.isMinimized }) == true) {
-                guard await running.hide() else { throw AppToggleError("Could not hide \(assignment.app.name).") }
+                guard await running.hide() else { throw PeekabooError("Could not hide \(assignment.app.name).") }
                 if let windowError { throw windowError }
                 return
             }
@@ -195,13 +195,13 @@ final class AssignmentFlow {
                     if let window = recent ?? (windows.count == 1 ? windows.first : nil) {
                         if window.isMinimized { try running.restoreWindow(window.id) }
                     } else if !minimized.isEmpty {
-                        throw AppToggleError("The most recently used window of \(assignment.app.name) is not known yet. Open the window you want once so AppToggle can track it.")
+                        throw PeekabooError("The most recently used window of \(assignment.app.name) is not known yet. Open the window you want once so Peekaboo can track it.")
                     }
                 } catch { windowError = error }
             }
             guard running.activate(options: [.activateAllWindows]) else {
                 let message = "Could not activate \(assignment.app.name). Try the shortcut again."
-                throw AppToggleError([windowError?.localizedDescription, message].compactMap { $0 }.joined(separator: "\n"))
+                throw PeekabooError([windowError?.localizedDescription, message].compactMap { $0 }.joined(separator: "\n"))
             }
             if let windowError { throw windowError }
         } catch { errorMessage = error.localizedDescription }
@@ -233,7 +233,7 @@ final class AssignmentFlow {
                     do { try hotkeys.unregister(registration.id) }
                     catch {
                         pendingCleanup.insert(registration.id)
-                        throw AppToggleError("\(saveError.localizedDescription) Cannot release the unsaved shortcut: \(error.localizedDescription)")
+                        throw PeekabooError("\(saveError.localizedDescription) Cannot release the unsaved shortcut: \(error.localizedDescription)")
                     }
                     throw saveError
                 }
