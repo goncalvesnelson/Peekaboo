@@ -47,6 +47,8 @@ Enable Peekaboo in **System Settings → Privacy & Security → Accessibility** 
 
 Window history starts when Accessibility access and tracking are available; it is not saved across restarts. If the app has only one window and no history exists, Peekaboo can identify that window. If several windows exist with no known recent window, it asks you to open the desired window once instead of guessing. Unsupported or unavailable window access produces an error, while ordinary app hiding and activation remain available.
 
+If a focus update fails, Peekaboo keeps the last recorded window order. A missed focus change can therefore cause it to restore an older window until it observes focus again.
+
 Activation requests bring non-minimized windows forward. Peekaboo does not change window positions or move windows between Spaces; macOS controls Space switching. A successful native request is not a guarantee of immediate focus. Peekaboo reports rejected restoration and activation requests.
 
 Shortcut labels reflect the keyboard layout used during recording. Command, Control, Option, and Shift flags are normalized; the label includes recognizable names or glyphs for special keys. Shortcuts use physical key codes, so re-record them if you change layouts and want a different physical combination.
