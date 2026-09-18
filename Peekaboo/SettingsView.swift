@@ -100,10 +100,7 @@ struct SettingsView: View {
         .frame(width: 620)
         .background(Color(nsColor: .windowBackgroundColor))
         .background(ShortcutRecorder(flow: flow).frame(width: 0, height: 0))
-        .onAppear {
-            NSApplication.shared.activate()
-            flow.refreshAccessibility()
-        }
+        .onAppear { flow.refreshAccessibility() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             flow.refreshAccessibility()
         }

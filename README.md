@@ -31,6 +31,8 @@ Tests use temporary configuration files. The scheme sets `PEEKABOO_TESTING=1` in
 
 Open **Peekaboo → Settings…** from the menu bar, click **Add App…**, and choose an installed `.app`. Click its **Record shortcut** field, press a key with Command, Control, or Option, then release the key to save. Escape, the field's cancel icon, closing settings, or switching away from Peekaboo cancels recording. Peekaboo suspends its own shortcuts during recording and restores them afterward.
 
+Selecting **Settings…** again brings the existing Settings window forward, even when another app is active.
+
 Click an assignment's shortcut field to edit it. The field shows a focus outline while recording. A rejected replacement keeps the previous assignment. Errors appear in settings and the menu bar; a failed startup registration leaves the assignment visible for correction. Choosing the same shortcut again retries its registration.
 
 Toggle errors appear with the affected assignment and clear after that assignment toggles successfully. You can also dismiss them. Settings actions and toggles for other assignments do not clear them, and successful toggles do not clear Settings errors. Removing an assignment or replacing its app removes its old toggle error.

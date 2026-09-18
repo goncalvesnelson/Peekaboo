@@ -4,7 +4,11 @@ Target host: macOS 26.6.2 (25G83), Xcode 26.4.1 (17E202). The environment versio
 
 ## Completed observations
 
+After the review fixes and Settings activation fix, `make check` passed all 28 tests with compiler warnings treated as errors. Updated flow cases cover active apps with no standard windows, independent Settings and per-assignment toggle errors, successful retry cleanup, assignment removal and replacement, pending launch completion after deletion, and the menu-bar warning while Accessibility is denied.
+
 The focus tracker now has an injectable Accessibility boundary. Automated tests establish two window rankings, inject failures during observer startup, window enumeration, focused-window lookup and minimized-state reads, and verify that rankings and window identities survive. They also cover restoration, later focus updates, permission loss, explicit stop and closed windows. Restoring the old history-clearing catch made all five failure cases fail; the retained-history implementation passes. These checks use inert element handles and fake Accessibility responses, so they do not require a permission grant or establish native window behavior.
+
+The Settings regression invokes the real SwiftUI button through `NSHostingMenu`, opens Settings, leaves its window visible while the app is inactive, and invokes the menu action again. It verifies that the same window becomes key and Peekaboo becomes active. The original `SettingsLink` and appearance-only activation failed this check. `NSApplication.activate()` and `NSRunningApplication.activate(options:)` also left the test host inactive; explicit `NSApplication.activate(ignoringOtherApps: true)` succeeded. The production action uses explicit activation only in response to selecting Settings. The permission button after a prior denial remains unverified.
 
 After the Peekaboo rename and icon additions, `make check build app install` passed all 24 tests and both build configurations. `/Applications/Peekaboo.app` passed strict signature verification and opened. Its compiled catalog contains the app icon and the custom menu bar icon as a preserved vector template with 1× and 2× representations. Saved assignments retain their existing storage location.
 
@@ -29,6 +33,7 @@ Use a target app with disposable documents, such as TextEdit. Keep any existing 
 | Check | Steps | Result |
 | --- | --- | --- |
 | Menu bar and picker | Open settings from the menu bar; choose a closed installed app. Confirm the name and selected path. Try an invalid bundle and confirm an actionable error. | Menu bar, Mail selection and recording completed by user. Closed-app selection and invalid-bundle GUI checks unverified; native API selection tests cover valid/invalid paths. |
+| Existing Settings window | Leave Settings open behind another app, then select Settings from Peekaboo's menu again. Confirm the existing window comes forward and receives focus. | Automated native menu-action regression passes; physical menu click remains an interactive check. |
 | Physical global delivery | Record an unused shortcut, focus another app, press and release it. Confirm the target launches or activates. Hold the shortcut before releasing and confirm it toggles once. | Mail activation completed with ⌥⌘period. Physical held-key and closed-app launch checks unverified. |
 | Hiding and current state | With the target focused, repeat the shortcut to hide it. Switch or hide apps independently, then repeat; confirm the action follows current focus. | Repeated Mail hiding/return completed after the native fix. Independent external-hide sequence unverified. |
 | Multiple normal windows | Open two disposable target windows. Cover both with another app, then trigger the target shortcut; confirm both normal windows come forward. | Unverified |
@@ -36,6 +41,7 @@ Use a target app with disposable documents, such as TextEdit. Keep any existing 
 | Unknown window history | Start Peekaboo with several target windows already minimized. Confirm an actionable history error instead of guessing. Open one window, minimize it, and retry. | Unverified |
 | No standard windows | With Accessibility enabled, close the target's disposable document windows while leaving it active. Trigger its shortcut and confirm it hides; repeat to activate, then hide again. | Unverified |
 | Permission and window failures | Deny or revoke Accessibility; confirm the menu-bar warning remains while ordinary toggles work without losing assignments. Grant access and trigger again; confirm the permission warning clears. Close a tracked window and use the next most recent surviving window. | Unverified |
+| Permission button after denial | With the installed Peekaboo already denied access, click Allow Accessibility and record whether a system dialog or Settings window appears. | Unverified. The API returns current trust, not whether the asynchronous prompt appeared. |
 | Independent error recovery | Cause toggle errors for two assignments. Retry one successfully and confirm only its error clears. Confirm Settings actions leave toggle errors visible and successful toggles leave Settings errors visible. | Unverified |
 | Window geometry | Note positions, restore the recent minimized window, and toggle twice; confirm no window positions change. | Unverified |
 | Spaces | Put target windows on different Spaces. Trigger from another Space and check normal macOS switching behavior; confirm each window retains its Space. | Unverified |

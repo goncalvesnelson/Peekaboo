@@ -7,7 +7,7 @@ struct PeekabooApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            SettingsLink { Text("Settings…") }
+            SettingsButton()
             if let message = delegate.flow.errorMessage {
                 Text(message)
             }
@@ -38,6 +38,18 @@ struct PeekabooApp: App {
         }
         Settings {
             SettingsView(flow: delegate.flow)
+        }
+    }
+}
+
+struct SettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button("Settings…") {
+            openSettings()
+            // A Settings click explicitly requests focus even while another app is active.
+            NSApplication.shared.activate(ignoringOtherApps: true)
         }
     }
 }
