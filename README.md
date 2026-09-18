@@ -2,23 +2,27 @@
 
 A native macOS 26 menu bar app that pairs an installed app with a global shortcut. Use the shortcut to launch a closed app, bring a background app forward, or hide the focused app.
 
-AppToggle uses SwiftUI, AppKit, and Carbon/HIToolbox, with no third-party dependencies. This personal-use build uses ad hoc signing and runs outside App Sandbox. It does not request Accessibility or Input Monitoring access.
+AppToggle uses SwiftUI, AppKit, and Carbon/HIToolbox, with no third-party dependencies. This personal-use build uses ad hoc signing and runs outside App Sandbox. Window restoration uses Accessibility access, enabled from Settings. AppToggle does not request Input Monitoring access.
 
 ## Build and test
 
 Requires Xcode 26 with its command-line tools selected and macOS 26. The development host has Xcode 26.4.1 and macOS 26.6.2.
 
 ```sh
-make build
-make test
-make run
+make build   # Debug build
+make app     # Signed Release app
+make install # Install Release app in /Applications
+make check   # Build and test
+make run     # Open the Debug app
 ```
+
+`make app` produces `.build/Build/Products/Release/AppToggle.app` and verifies its signature. `make install` replaces `/Applications/AppToggle.app`; use `make install PREFIX=/another/existing/directory` to install elsewhere. Quit and reopen AppToggle to use a newly installed build.
 
 `make check` runs the same build-and-test pass as `make test`. Both Swift and Clang treat compiler warnings as errors. These commands use the shared `AppToggle` scheme, a macOS destination matching the host architecture, and `.build/` for derived data. On this Apple silicon Mac, the canonical underlying commands are:
 
 ```sh
-xcodebuild -project AppToggle.xcodeproj -scheme AppToggle -destination 'platform=macOS,arch=arm64' -derivedDataPath .build SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES build
-xcodebuild -project AppToggle.xcodeproj -scheme AppToggle -destination 'platform=macOS,arch=arm64' -derivedDataPath .build SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES test
+xcodebuild -project AppToggle.xcodeproj -scheme AppToggle -destination 'platform=macOS,arch=arm64' -derivedDataPath .build SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES -configuration Debug build
+xcodebuild -project AppToggle.xcodeproj -scheme AppToggle -destination 'platform=macOS,arch=arm64' -derivedDataPath .build SWIFT_TREAT_WARNINGS_AS_ERRORS=YES GCC_TREAT_WARNINGS_AS_ERRORS=YES -configuration Debug test
 ```
 
 Tests use temporary configuration files. The scheme sets `APPTOGGLE_TESTING=1` in the test host so it does not restore your own assignments or register their shortcuts.
@@ -39,7 +43,11 @@ Configuration lives at `~/Library/Application Support/AppToggle/assignments.json
 
 Each completed shortcut gesture requests one app toggle. AppToggle checks the app's current state for every gesture, including changes made outside AppToggle, and suppresses repeated launch requests while one is outstanding.
 
-Activation requests bring all non-minimized windows forward. AppToggle does not restore minimized windows, change window positions, or move windows between Spaces. macOS controls Space switching. A successful native activation request is not a guarantee of immediate focus; AppToggle reports rejected requests.
+Enable AppToggle in **System Settings → Privacy & Security → Accessibility** using **Allow Accessibility…** in AppToggle settings. AppToggle tracks focused windows of assigned apps while it runs. It restores the most recently used window if that window is minimized, leaving other minimized windows alone. An active app with all its windows minimized is restored instead of hidden. Apps hidden with ⌘H are brought forward too.
+
+Window history starts when Accessibility access and tracking are available; it is not saved across restarts. If the app has only one window and no history exists, AppToggle can identify that window. If several windows exist with no known recent window, it asks you to open the desired window once instead of guessing. Unsupported or unavailable window access produces an error, while ordinary app hiding and activation remain available.
+
+Activation requests bring non-minimized windows forward. AppToggle does not change window positions or move windows between Spaces; macOS controls Space switching. A successful native request is not a guarantee of immediate focus. AppToggle reports rejected restoration and activation requests.
 
 Shortcut labels reflect the keyboard layout used during recording. Command, Control, Option, and Shift flags are normalized; the label includes recognizable names or glyphs for special keys. Shortcuts use physical key codes, so re-record them if you change layouts and want a different physical combination.
 

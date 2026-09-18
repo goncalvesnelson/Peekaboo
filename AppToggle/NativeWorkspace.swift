@@ -1,7 +1,77 @@
 import AppKit
+import ApplicationServices
 
 @MainActor
-struct NativeWorkspace: AppWorkspace {
+final class NativeWorkspace: NSObject, AppWorkspace {
+    private var selectedApps: [SelectedApp] = []
+    private var runningApps: [pid_t: NativeRunningApp] = [:]
+    private var observingWorkspace = false
+
+    var accessibilityGranted: Bool { AXIsProcessTrustedWithOptions(nil) }
+
+    func requestAccessibilityAccess() {
+        // The SDK imports this constant as mutable global state, which Swift 6 rejects.
+        let options = ["AXTrustedCheckOptionPrompt": true]
+        _ = AXIsProcessTrustedWithOptions(options as CFDictionary)
+    }
+
+    func trackApplications(_ apps: [SelectedApp]) {
+        selectedApps = apps
+        let center = NSWorkspace.shared.notificationCenter
+        if apps.isEmpty {
+            center.removeObserver(self)
+            observingWorkspace = false
+        } else if !observingWorkspace {
+            for notification in [NSWorkspace.didLaunchApplicationNotification,
+                                 NSWorkspace.didActivateApplicationNotification,
+                                 NSWorkspace.didTerminateApplicationNotification] {
+                center.addObserver(self, selector: #selector(applicationsChanged), name: notification, object: nil)
+            }
+            observingWorkspace = true
+        }
+        refreshApplications()
+    }
+
+    @objc private func applicationsChanged(_ notification: Notification) {
+        refreshApplications()
+    }
+
+    private func refreshApplications() {
+        for (pid, running) in runningApps {
+            guard !running.application.isTerminated,
+                  selectedApps.contains(where: { matches(running.application, selected: $0) }) else {
+                running.stopTracking()
+                runningApps.removeValue(forKey: pid)
+                continue
+            }
+        }
+        for app in selectedApps {
+            for running in NSRunningApplication.runningApplications(withBundleIdentifier: app.bundleIdentifier)
+                where matches(running, selected: app) {
+                tracker(for: running).observeCurrentFocus()
+            }
+        }
+    }
+
+    private func matches(_ running: NSRunningApplication, selected app: SelectedApp) -> Bool {
+        !running.isTerminated && running.bundleIdentifier == app.bundleIdentifier
+            && running.bundleURL?.resolvingSymlinksInPath().standardizedFileURL == app.url
+    }
+
+    private func tracker(for application: NSRunningApplication) -> NativeRunningApp {
+        let pid = application.processIdentifier
+        if let existing = runningApps[pid], !existing.application.isTerminated { return existing }
+        runningApps[pid]?.stopTracking()
+        let running = NativeRunningApp(application: application)
+        runningApps[pid] = running
+        return running
+    }
+
+    isolated deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        for running in runningApps.values { running.stopTracking() }
+    }
+
     func selectApplication(at url: URL) throws -> SelectedApp {
         let resolvedURL = url.resolvingSymlinksInPath().standardizedFileURL
         guard resolvedURL.isFileURL, resolvedURL.pathExtension.lowercased() == "app",
@@ -33,7 +103,7 @@ struct NativeWorkspace: AppWorkspace {
         guard matches.count <= 1 else {
             throw AppToggleError("Multiple instances of \(app.name) are running from the selected copy. Quit the extra instance and try again.")
         }
-        return matches.first.map { NativeRunningApp(application: $0) }
+        return matches.first.map { tracker(for: $0) }
     }
 
     func launch(_ app: SelectedApp) async throws {
@@ -43,7 +113,8 @@ struct NativeWorkspace: AppWorkspace {
         configuration.createsNewApplicationInstance = false
         configuration.allowsRunningApplicationSubstitution = false
         configuration.promptsUserIfNeeded = false
-        _ = try await NSWorkspace.shared.openApplication(at: app.url, configuration: configuration)
+        let application = try await NSWorkspace.shared.openApplication(at: app.url, configuration: configuration)
+        tracker(for: application).observeCurrentFocus()
     }
 
     private func validateInstalledCopy(_ app: SelectedApp) throws {
@@ -60,9 +131,22 @@ struct NativeWorkspace: AppWorkspace {
 
 @MainActor
 private final class NativeRunningApp: RunningApp {
-    private let application: NSRunningApplication
+    let application: NSRunningApplication
+    private let windowTracker: AccessibilityWindows
 
-    init(application: NSRunningApplication) { self.application = application }
+    init(application: NSRunningApplication) {
+        self.application = application
+        windowTracker = AccessibilityWindows(application: application)
+        windowTracker.observeCurrentFocus()
+    }
+
+    func windows() throws -> [AppWindow] { try windowTracker.windows() }
+
+    func restoreWindow(_ id: UUID) throws { try windowTracker.restoreWindow(id) }
+
+    func observeCurrentFocus() { windowTracker.observeCurrentFocus() }
+
+    func stopTracking() { windowTracker.stop() }
 
     var isActive: Bool { application.isActive }
 

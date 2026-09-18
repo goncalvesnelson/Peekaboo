@@ -4,7 +4,11 @@ Target host: macOS 26.6.2 (25G83), Xcode 26.4.1 (17E202). The environment versio
 
 ## Completed observations
 
-Final automated validation: `make check` passed all 21 tests with compiler warnings treated as errors. `make build` passed. These results cover the implementation and native API checks described below, not the unperformed interactive checks.
+After adding explicit window restoration, `make check build app install` passed all 24 tests, built Debug and Release with compiler warnings treated as errors, verified the Release signature, and installed `/Applications/AppToggle.app`. The installed copy passed `codesign --verify --strict` and opened successfully. Flow tests cover selecting one recent window, repeated hide/return without restoring older windows, active apps with all windows minimized, missing history, denied access, and failed restoration. Native Accessibility manipulation remains unverified pending the permission grant and interactive checks below.
+
+A disposable two-window AppKit probe confirmed that ordinary activation left both minimized windows minimized, native reopening restored the recent window only when both were minimized, and activation unhides a hidden app. Because applications control reopening, the user chose explicit Accessibility window selection and focus tracking instead. The probe did not test the new Accessibility implementation.
+
+Before the explicit-window-restoration change, `make check` passed all 21 tests with compiler warnings treated as errors. `make build` passed. These results cover the implementation and native API checks described below, not the unperformed interactive checks.
 
 On 2026-09-18, the user selected Mail at `/System/Applications/Mail.app`, recorded ⌥⌘period, and exercised the physical shortcut. The active input source read during this session was U.S. (`com.apple.keylayout.US`). Mail's assignment survived AppToggle restarts.
 
@@ -16,7 +20,7 @@ Automated native checks exercise TextEdit bundle selection, invalid selection er
 
 ## Interactive procedure
 
-Use a target app with disposable documents, such as TextEdit. Keep any existing documents untouched. No Accessibility, Input Monitoring, AppleScript, or window-manipulation permissions are part of this procedure.
+Use a target app with disposable documents, such as TextEdit. Keep any existing documents untouched. Explicit restoration now requires Accessibility access for AppToggle. Enable it from AppToggle settings before checking minimized windows. Input Monitoring and AppleScript are not used.
 
 | Check | Steps | Result |
 | --- | --- | --- |
@@ -24,7 +28,10 @@ Use a target app with disposable documents, such as TextEdit. Keep any existing 
 | Physical global delivery | Record an unused shortcut, focus another app, press and release it. Confirm the target launches or activates. Hold the shortcut before releasing and confirm it toggles once. | Mail activation completed with ⌥⌘period. Physical held-key and closed-app launch checks unverified. |
 | Hiding and current state | With the target focused, repeat the shortcut to hide it. Switch or hide apps independently, then repeat; confirm the action follows current focus. | Repeated Mail hiding/return completed after the native fix. Independent external-hide sequence unverified. |
 | Multiple normal windows | Open two disposable target windows. Cover both with another app, then trigger the target shortcut; confirm both normal windows come forward. | Unverified |
-| Minimized windows and geometry | Minimize one target window and note the other window's position. Toggle twice; confirm the minimized window stays minimized and geometry stays unchanged. Also check an app with only minimized windows. | Unverified |
+| Recent minimized window | With Accessibility enabled, focus two target windows in order and minimize both. Trigger the shortcut; only the recent window should return. Toggle twice more and confirm the older window remains minimized. Repeat while the app remains active with all windows minimized. | Unverified |
+| Unknown window history | Start AppToggle with several target windows already minimized. Confirm an actionable history error instead of guessing. Open one window, minimize it, and retry. | Unverified |
+| Permission and window failures | Deny or revoke Accessibility; confirm visible errors without losing assignments. Close a tracked window and use the next most recent surviving window. | Unverified |
+| Window geometry | Note positions, restore the recent minimized window, and toggle twice; confirm no window positions change. | Unverified |
 | Spaces | Put target windows on different Spaces. Trigger from another Space and check normal macOS switching behavior; confirm each window retains its Space. | Unverified |
 | Keyboard layout | Record a printable key, an Option combination, and an Option-Shift combination on the active layout. Confirm labels and actual delivery. Note the input source used. | U.S. layout, ⌥⌘period recorded and delivered. Option-only, Option-Shift and other layouts unverified. |
 | Recording lifecycle | Start editing an existing shortcut and try it while recording. Cancel with Escape and then by switching apps. Confirm the old shortcut works afterward. Close settings during recording and repeat. | Unverified |

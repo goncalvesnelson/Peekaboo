@@ -5,7 +5,10 @@ import Observation
 @MainActor
 @Observable
 final class AssignmentFlow {
-    private(set) var assignments: [Assignment] = []
+    private(set) var assignments: [Assignment] = [] {
+        didSet { workspace.trackApplications(assignments.map(\.app)) }
+    }
+    private(set) var accessibilityGranted = false
     private(set) var selectedApp: SelectedApp?
     private(set) var isRecording = false
     private(set) var recordingAssignmentID: UUID?
@@ -31,6 +34,7 @@ final class AssignmentFlow {
 
     func load() {
         guard !isRecording else { return }
+        refreshAccessibility()
         do {
             let loaded = try store.load()
             try cleanUpRegistrations()
@@ -45,6 +49,20 @@ final class AssignmentFlow {
             errorMessage = error.localizedDescription
             restoreRegistrations()
         }
+    }
+
+    func refreshAccessibility() {
+        accessibilityGranted = workspace.accessibilityGranted
+        workspace.trackApplications(assignments.map(\.app))
+    }
+
+    func requestAccessibilityAccess() {
+        workspace.requestAccessibilityAccess()
+        refreshAccessibility()
+    }
+
+    func stopTracking() {
+        workspace.trackApplications([])
     }
 
     @discardableResult
@@ -158,13 +176,34 @@ final class AssignmentFlow {
                 try await workspace.launch(assignment.app)
                 return
             }
-            if running.isActive {
+            accessibilityGranted = workspace.accessibilityGranted
+            var windowError: Error?
+            var windows: [AppWindow]?
+            do { windows = try running.windows() }
+            catch { windowError = error }
+            if running.isActive && (windows == nil || windows?.contains(where: { !$0.isMinimized }) == true) {
                 guard await running.hide() else { throw AppToggleError("Could not hide \(assignment.app.name).") }
+                if let windowError { throw windowError }
                 return
             }
-            guard running.activate(options: [.activateAllWindows]) else {
-                throw AppToggleError("Could not activate \(assignment.app.name). Try the shortcut again.")
+            if let windows {
+                do {
+                    let minimized = windows.filter(\.isMinimized)
+                    let recent = windows.filter { $0.focusOrder != nil }.max {
+                        ($0.focusOrder ?? 0) < ($1.focusOrder ?? 0)
+                    }
+                    if let window = recent ?? (windows.count == 1 ? windows.first : nil) {
+                        if window.isMinimized { try running.restoreWindow(window.id) }
+                    } else if !minimized.isEmpty {
+                        throw AppToggleError("The most recently used window of \(assignment.app.name) is not known yet. Open the window you want once so AppToggle can track it.")
+                    }
+                } catch { windowError = error }
             }
+            guard running.activate(options: [.activateAllWindows]) else {
+                let message = "Could not activate \(assignment.app.name). Try the shortcut again."
+                throw AppToggleError([windowError?.localizedDescription, message].compactMap { $0 }.joined(separator: "\n"))
+            }
+            if let windowError { throw windowError }
         } catch { errorMessage = error.localizedDescription }
     }
 

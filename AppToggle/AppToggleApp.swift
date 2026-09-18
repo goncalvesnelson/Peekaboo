@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        flow.stopTracking()
         do {
             try hotkeys.shutdown()
         } catch {

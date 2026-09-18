@@ -108,12 +108,23 @@ protocol HotkeyRegistry: AnyObject {
 @MainActor
 protocol RunningApp: AnyObject {
     var isActive: Bool { get }
+    func windows() throws -> [AppWindow]
+    func restoreWindow(_ id: UUID) throws
     func hide() async -> Bool
     func activate(options: NSApplication.ActivationOptions) -> Bool
 }
 
+struct AppWindow: Equatable {
+    let id: UUID
+    let isMinimized: Bool
+    let focusOrder: UInt64?
+}
+
 @MainActor
 protocol AppWorkspace {
+    var accessibilityGranted: Bool { get }
+    func requestAccessibilityAccess()
+    func trackApplications(_ apps: [SelectedApp])
     func selectApplication(at url: URL) throws -> SelectedApp
     func runningApplication(for app: SelectedApp) throws -> (any RunningApp)?
     func launch(_ app: SelectedApp) async throws

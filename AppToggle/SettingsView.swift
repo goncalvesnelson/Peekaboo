@@ -63,6 +63,20 @@ struct SettingsView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
 
+            if !flow.accessibilityGranted {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Allow Accessibility to restore minimized windows", systemImage: "macwindow")
+                        .font(.callout.weight(.medium))
+                    Text("AppToggle uses window focus to restore only your most recently used minimized window. Enable AppToggle in System Settings → Privacy & Security → Accessibility.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    Button("Allow Accessibility…") { flow.requestAccessibilityAccess() }
+                        .disabled(flow.isRecording)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+            }
+
             if let message = flow.errorMessage {
                 VStack(alignment: .leading, spacing: 10) {
                     Label(message, systemImage: "exclamationmark.triangle")
@@ -86,7 +100,13 @@ struct SettingsView: View {
         .frame(width: 620)
         .background(Color(nsColor: .windowBackgroundColor))
         .background(ShortcutRecorder(flow: flow).frame(width: 0, height: 0))
-        .onAppear { NSApplication.shared.activate() }
+        .onAppear {
+            NSApplication.shared.activate()
+            flow.refreshAccessibility()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            flow.refreshAccessibility()
+        }
         .onDisappear { flow.cancelRecording() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             flow.cancelRecording()

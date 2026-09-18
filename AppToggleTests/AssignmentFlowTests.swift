@@ -39,6 +39,129 @@ struct AssignmentFlowTests {
         await restarted.trigger(assignment.id)
         #expect(!running.isHidden)
         #expect(running.isActive)
+
+        let older = AppWindow(id: UUID(), isMinimized: true, focusOrder: 1)
+        let recent = AppWindow(id: UUID(), isMinimized: true, focusOrder: 2)
+        running.appWindows = [recent, older]
+        await restarted.trigger(assignment.id)
+        #expect(running.isActive)
+        #expect(!running.isHidden)
+        #expect(running.appWindows.first(where: { $0.id == recent.id })?.isMinimized == false)
+        #expect(running.appWindows.first(where: { $0.id == older.id })?.isMinimized == true)
+        await restarted.trigger(assignment.id)
+        #expect(running.isHidden)
+        await restarted.trigger(assignment.id)
+        #expect(running.isActive)
+        #expect(running.appWindows.first(where: { $0.id == older.id })?.isMinimized == true)
+    }
+
+    @Test func unknownWindowHistoryDoesNotGuessAndRecoversAfterFocusIsObserved() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        let assignment = try #require(flow.assignments.first)
+        let running = FakeRunningApp()
+        fixture.workspace.running[fixture.app.url] = running
+        let first = AppWindow(id: UUID(), isMinimized: true, focusOrder: nil)
+        let second = AppWindow(id: UUID(), isMinimized: true, focusOrder: nil)
+        running.appWindows = [first, second]
+        await flow.trigger(assignment.id)
+        #expect(flow.errorMessage?.contains("Open the window you want once") == true)
+        #expect(running.appWindows == [first, second])
+        #expect(running.isActive)
+
+        running.isActive = false
+        let visible = AppWindow(id: first.id, isMinimized: false, focusOrder: nil)
+        running.appWindows = [visible, second]
+        await flow.trigger(assignment.id)
+        #expect(flow.errorMessage?.contains("Open the window you want once") == true)
+        #expect(running.appWindows == [visible, second])
+
+        running.appWindows = [first, AppWindow(id: second.id, isMinimized: true, focusOrder: 1)]
+        flow.errorMessage = nil
+        await flow.trigger(assignment.id)
+        #expect(running.appWindows.first == first)
+        #expect(running.appWindows.last?.isMinimized == false)
+        #expect(flow.errorMessage == nil)
+        #expect(flow.assignments == [assignment])
+    }
+
+    @Test func singleMinimizedWindowRestoresWithoutHistoryAndClosedWindowHistoryIsNotUsed() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        let assignment = try #require(flow.assignments.first)
+        let running = FakeRunningApp()
+        running.appWindows = [AppWindow(id: UUID(), isMinimized: true, focusOrder: nil)]
+        fixture.workspace.running[fixture.app.url] = running
+        await flow.trigger(assignment.id)
+        #expect(running.appWindows.first?.isMinimized == false)
+        #expect(running.isActive)
+        running.appWindows = [AppWindow(id: UUID(), isMinimized: true, focusOrder: nil)]
+        await flow.trigger(assignment.id)
+        #expect(running.appWindows.first?.isMinimized == false)
+        #expect(flow.errorMessage == nil)
+    }
+
+    @Test func windowAccessAndRestorationFailuresPreserveAssignmentsAndAllowOtherApps() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        let assignment = try #require(flow.assignments.first)
+        let running = FakeRunningApp()
+        fixture.workspace.running[fixture.app.url] = running
+        fixture.workspace.accessibilityGranted = false
+        running.windowError = AppToggleError("Allow Accessibility in Settings.")
+        running.isHidden = true
+        await flow.trigger(assignment.id)
+        #expect(!flow.accessibilityGranted)
+        #expect(flow.errorMessage == "Allow Accessibility in Settings.")
+        #expect(!running.isHidden)
+        #expect(running.isActive)
+        await flow.trigger(assignment.id)
+        #expect(running.isHidden)
+        #expect(!running.isActive)
+        #expect(flow.errorMessage == "Allow Accessibility in Settings.")
+        flow.requestAccessibilityAccess()
+        #expect(fixture.workspace.accessibilityRequested)
+        fixture.workspace.accessibilityGranted = true
+        flow.refreshAccessibility()
+        #expect(flow.accessibilityGranted)
+        #expect(fixture.workspace.trackedApps == [fixture.app])
+
+        running.windowError = nil
+        running.restoreError = AppToggleError("The window no longer exists.")
+        let minimized = AppWindow(id: UUID(), isMinimized: true, focusOrder: 1)
+        running.appWindows = [minimized]
+        await flow.trigger(assignment.id)
+        #expect(flow.errorMessage == "The window no longer exists.")
+        #expect(running.appWindows == [minimized])
+        #expect(flow.assignments == [assignment])
+
+        let other = SelectedApp(bundleIdentifier: "test.other", url: URL(fileURLWithPath: "/Applications/Other.app"), name: "Other")
+        fixture.workspace.selections[other.url] = other
+        flow.selectApplication(at: other.url)
+        flow.beginRecording()
+        try fixture.record(flow, keyCode: 1, characters: "s")
+        let second = try #require(flow.assignments.last)
+        await flow.trigger(second.id)
+        #expect(fixture.workspace.running[other.url]?.isActive == true)
+        flow.deleteAssignment(assignment.id)
+        #expect(fixture.workspace.trackedApps == [other])
+        flow.stopTracking()
+        #expect(fixture.workspace.trackedApps.isEmpty)
     }
 
     @Test func recordingSuspendsShortcutsAndEscapeRestoresSavedAssignment() async throws {
@@ -646,6 +769,22 @@ private final class FakeRunningApp: RunningApp {
     var refuseHide = false
     var refuseActivation = false
     var activationOptions: NSApplication.ActivationOptions = []
+    var appWindows = [AppWindow(id: UUID(), isMinimized: false, focusOrder: 1)]
+    var windowError: AppToggleError?
+    var restoreError: AppToggleError?
+
+    func windows() throws -> [AppWindow] {
+        if let windowError { throw windowError }
+        return appWindows
+    }
+
+    func restoreWindow(_ id: UUID) throws {
+        if let restoreError { throw restoreError }
+        let order = (appWindows.compactMap(\.focusOrder).max() ?? 0) + 1
+        appWindows = appWindows.map {
+            $0.id == id ? AppWindow(id: id, isMinimized: false, focusOrder: order) : $0
+        }
+    }
 
     func hide() async -> Bool {
         guard !refuseHide else { return false }
@@ -665,6 +804,9 @@ private final class FakeRunningApp: RunningApp {
 
 @MainActor
 private final class FakeWorkspace: AppWorkspace {
+    var accessibilityGranted = true
+    var accessibilityRequested = false
+    var trackedApps: [SelectedApp] = []
     var selections: [URL: SelectedApp] = [:]
     var running: [URL: FakeRunningApp] = [:]
     var launchError: AppToggleError?
@@ -672,6 +814,10 @@ private final class FakeWorkspace: AppWorkspace {
     var holdLaunch = false
     var launched: [SelectedApp] = []
     private var launchObserver: CheckedContinuation<Void, Never>?
+
+    func requestAccessibilityAccess() { accessibilityRequested = true }
+
+    func trackApplications(_ apps: [SelectedApp]) { trackedApps = apps }
 
     func waitForLaunch() async {
         guard launched.isEmpty else { return }
