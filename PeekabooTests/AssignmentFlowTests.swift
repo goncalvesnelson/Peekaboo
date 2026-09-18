@@ -126,6 +126,10 @@ struct AssignmentFlowTests {
         defer { fixture.removeFiles() }
         let flow = fixture.flow()
         flow.load()
+        fixture.workspace.accessibilityGranted = false
+        try await fixture.activateApplicationAndWaitForAccessibility(false, in: flow)
+        #expect(flow.hasWarnings)
+        #expect(flow.assignments.isEmpty)
         flow.selectApplication(at: fixture.app.url)
         flow.beginRecording()
         try fixture.record(flow)
@@ -149,10 +153,14 @@ struct AssignmentFlowTests {
         flow.requestAccessibilityAccess()
         #expect(fixture.workspace.accessibilityRequested)
         fixture.workspace.accessibilityGranted = true
-        flow.refreshAccessibility()
+        try await fixture.activateApplicationAndWaitForAccessibility(true, in: flow)
         #expect(flow.accessibilityGranted)
         #expect(!flow.hasWarnings)
         #expect(fixture.workspace.trackedApps == [fixture.app])
+        let trackingCalls = fixture.workspace.trackingCalls
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(fixture.workspace.trackingCalls == trackingCalls)
 
         running.windowError = PeekabooError("Window access timed out.")
         await flow.trigger(assignment.id)
@@ -167,6 +175,17 @@ struct AssignmentFlowTests {
         #expect(running.appWindows == [minimized])
         #expect(flow.assignments == [assignment])
 
+        flow.errorMessage = "Settings failure"
+        fixture.workspace.accessibilityGranted = false
+        try await fixture.activateApplicationAndWaitForAccessibility(false, in: flow)
+        #expect(flow.hasWarnings)
+        fixture.workspace.accessibilityGranted = true
+        try await fixture.activateApplicationAndWaitForAccessibility(true, in: flow)
+        #expect(flow.errorMessage == "Settings failure")
+        #expect(flow.triggerErrors[assignment.id] == "The window no longer exists.")
+        #expect(flow.hasWarnings)
+        flow.errorMessage = nil
+
         let other = SelectedApp(bundleIdentifier: "test.other", url: URL(fileURLWithPath: "/Applications/Other.app"), name: "Other")
         fixture.workspace.selections[other.url] = other
         flow.selectApplication(at: other.url)
@@ -180,6 +199,11 @@ struct AssignmentFlowTests {
         #expect(fixture.workspace.trackedApps == [other])
         #expect(flow.triggerErrors.isEmpty)
         flow.stopTracking()
+        #expect(fixture.workspace.trackedApps.isEmpty)
+        fixture.workspace.accessibilityGranted = false
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(flow.accessibilityGranted)
         #expect(fixture.workspace.trackedApps.isEmpty)
     }
 
@@ -812,6 +836,15 @@ private final class Fixture {
         do { try FileManager.default.removeItem(at: directory) }
         catch { Issue.record(error) }
     }
+
+    func activateApplicationAndWaitForAccessibility(_ granted: Bool, in flow: AssignmentFlow) async throws {
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didActivateApplicationNotification, object: nil)
+        for _ in 0..<10 {
+            if flow.accessibilityGranted == granted { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try #require(flow.accessibilityGranted == granted)
+    }
 }
 
 @MainActor
@@ -892,6 +925,7 @@ private final class FakeWorkspace: AppWorkspace {
     var accessibilityGranted = true
     var accessibilityRequested = false
     var trackedApps: [SelectedApp] = []
+    var trackingCalls = 0
     var selections: [URL: SelectedApp] = [:]
     var running: [URL: FakeRunningApp] = [:]
     var launchError: PeekabooError?
@@ -902,7 +936,10 @@ private final class FakeWorkspace: AppWorkspace {
 
     func requestAccessibilityAccess() { accessibilityRequested = true }
 
-    func trackApplications(_ apps: [SelectedApp]) { trackedApps = apps }
+    func trackApplications(_ apps: [SelectedApp]) {
+        trackedApps = apps
+        trackingCalls += 1
+    }
 
     func waitForLaunch() async {
         guard launched.isEmpty else { return }

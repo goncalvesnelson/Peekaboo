@@ -29,6 +29,7 @@ final class AssignmentFlow {
     private let store: AssignmentStore
     private let hotkeys: any HotkeyRegistry
     private let workspace: any AppWorkspace
+    @ObservationIgnored private var applicationActivationObserver: (any NSObjectProtocol)?
     private var registrations: [UUID: UUID] = [:]
     private var generations: [UUID: UUID] = [:]
     private var pendingCleanup = Set<UUID>()
@@ -45,6 +46,7 @@ final class AssignmentFlow {
 
     func load() {
         guard !isRecording else { return }
+        startMonitoringAccessibility()
         refreshAccessibility()
         do {
             let loaded = try store.load()
@@ -63,8 +65,22 @@ final class AssignmentFlow {
     }
 
     func refreshAccessibility() {
-        accessibilityGranted = workspace.accessibilityGranted
+        let granted = workspace.accessibilityGranted
+        guard granted != accessibilityGranted else { return }
+        accessibilityGranted = granted
         workspace.trackApplications(assignments.map(\.app))
+    }
+
+    private func startMonitoringAccessibility() {
+        guard applicationActivationObserver == nil else { return }
+        applicationActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.applicationActivationObserver != nil else { return }
+                self.refreshAccessibility()
+            }
+        }
     }
 
     func requestAccessibilityAccess() {
@@ -73,7 +89,17 @@ final class AssignmentFlow {
     }
 
     func stopTracking() {
+        if let applicationActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(applicationActivationObserver)
+            self.applicationActivationObserver = nil
+        }
         workspace.trackApplications([])
+    }
+
+    isolated deinit {
+        if let applicationActivationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(applicationActivationObserver)
+        }
     }
 
     @discardableResult
@@ -188,7 +214,7 @@ final class AssignmentFlow {
                 triggerErrors[id] = triggerError
             }
         }
-        accessibilityGranted = workspace.accessibilityGranted
+        refreshAccessibility()
         do {
             guard let running = try workspace.runningApplication(for: assignment.app) else {
                 try await workspace.launch(assignment.app)
