@@ -6,14 +6,25 @@ import Observation
 @Observable
 final class AssignmentFlow {
     private(set) var assignments: [Assignment] = [] {
-        didSet { workspace.trackApplications(assignments.map(\.app)) }
+        didSet {
+            triggerErrors = triggerErrors.filter { id, _ in
+                guard let previous = oldValue.first(where: { $0.id == id }) else { return false }
+                return assignments.contains { $0.id == id && $0.app == previous.app }
+            }
+            workspace.trackApplications(assignments.map(\.app))
+        }
     }
     private(set) var accessibilityGranted = false
     private(set) var selectedApp: SelectedApp?
     private(set) var isRecording = false
     private(set) var recordingAssignmentID: UUID?
     var errorMessage: String?
+    var triggerErrors: [UUID: String] = [:]
     private(set) var registrationErrors: [UUID: String] = [:]
+
+    var hasWarnings: Bool {
+        !accessibilityGranted || errorMessage != nil || !triggerErrors.isEmpty || !registrationErrors.isEmpty
+    }
 
     private let store: AssignmentStore
     private let hotkeys: any HotkeyRegistry
@@ -170,18 +181,26 @@ final class AssignmentFlow {
     func trigger(_ id: UUID) async {
         guard !isRecording, !inFlight.contains(id), let assignment = assignments.first(where: { $0.id == id }) else { return }
         inFlight.insert(id)
-        defer { inFlight.remove(id) }
+        var triggerError: String?
+        defer {
+            inFlight.remove(id)
+            if assignments.contains(where: { $0.id == id && $0.app == assignment.app }) {
+                triggerErrors[id] = triggerError
+            }
+        }
+        accessibilityGranted = workspace.accessibilityGranted
         do {
             guard let running = try workspace.runningApplication(for: assignment.app) else {
                 try await workspace.launch(assignment.app)
                 return
             }
-            accessibilityGranted = workspace.accessibilityGranted
             var windowError: Error?
             var windows: [AppWindow]?
-            do { windows = try running.windows() }
-            catch { windowError = error }
-            if running.isActive && (windows == nil || windows?.contains(where: { !$0.isMinimized }) == true) {
+            if accessibilityGranted {
+                do { windows = try running.windows() }
+                catch { windowError = error }
+            }
+            if running.isActive && (windows == nil || windows?.isEmpty == true || windows?.contains(where: { !$0.isMinimized }) == true) {
                 guard await running.hide() else { throw PeekabooError("Could not hide \(assignment.app.name).") }
                 if let windowError { throw windowError }
                 return
@@ -204,7 +223,7 @@ final class AssignmentFlow {
                 throw PeekabooError([windowError?.localizedDescription, message].compactMap { $0 }.joined(separator: "\n"))
             }
             if let windowError { throw windowError }
-        } catch { errorMessage = error.localizedDescription }
+        } catch { triggerError = error.localizedDescription }
     }
 
     private func finishRecording(_ shortcut: Shortcut) {

@@ -33,6 +33,8 @@ Open **Peekaboo → Settings…** from the menu bar, click **Add App…**, and c
 
 Click an assignment's shortcut field to edit it. The field shows a focus outline while recording. A rejected replacement keeps the previous assignment. Errors appear in settings and the menu bar; a failed startup registration leaves the assignment visible for correction. Choosing the same shortcut again retries its registration.
 
+Toggle errors appear with the affected assignment and clear after that assignment toggles successfully. You can also dismiss them. Settings actions and toggles for other assignments do not clear them, and successful toggles do not clear Settings errors. Removing an assignment or replacing its app removes its old toggle error.
+
 The **trash button** removes the app–shortcut pairing and releases its global shortcut. If saving fails, the assignment stays usable. If macOS cannot release a deleted shortcut, Peekaboo reports the cleanup error; use **Reload Saved Assignments** to retry.
 
 Assignments target the installed copy you selected, identified by its file URL and bundle identifier. If that copy moves or disappears, click the app's name or icon to select it again and record its shortcut. Peekaboo will not silently launch another installed copy. You can add more than one assignment; each shortcut must be unique within Peekaboo.
@@ -44,6 +46,8 @@ Configuration lives at `~/Library/Application Support/AppToggle/assignments.json
 Each completed shortcut gesture requests one app toggle. Peekaboo checks the app's current state for every gesture, including changes made outside Peekaboo, and suppresses repeated launch requests while one is outstanding.
 
 Enable Peekaboo in **System Settings → Privacy & Security → Accessibility** using **Allow Accessibility…** in Peekaboo settings. Peekaboo tracks focused windows of assigned apps while it runs. It restores the most recently used window if that window is minimized, leaving other minimized windows alone. An active app with all its windows minimized is restored instead of hidden. Apps hidden with ⌘H are brought forward too.
+
+An active app with no standard windows is hidden. While Accessibility access is denied, Peekaboo can still launch, hide, and activate apps; the menu bar keeps its warning icon and Settings shows permission guidance. Granting access clears the permission warning when Peekaboo next checks it, independently of any toggle or Settings errors.
 
 Window history starts when Accessibility access and tracking are available; it is not saved across restarts. If the app has only one window and no history exists, Peekaboo can identify that window. If several windows exist with no known recent window, it asks you to open the desired window once instead of guessing. Unsupported or unavailable window access produces an error, while ordinary app hiding and activation remain available.
 

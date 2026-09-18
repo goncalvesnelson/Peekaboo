@@ -146,6 +146,16 @@ struct SettingsView: View {
                     .font(.callout).foregroundStyle(.red)
                     .padding(.leading, 40)
             }
+            if let message = flow.triggerErrors[assignment.id] {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(message, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red).textSelection(.enabled)
+                    Button("Dismiss") { flow.triggerErrors[assignment.id] = nil }
+                        .accessibilityLabel("Dismiss toggle error for \(assignment.app.name)")
+                }
+                .font(.callout)
+                .padding(.leading, 40)
+            }
         }
         .padding(14)
     }

@@ -11,6 +11,14 @@ struct PeekabooApp: App {
             if let message = delegate.flow.errorMessage {
                 Text(message)
             }
+            ForEach(delegate.flow.assignments) { assignment in
+                if let message = delegate.flow.triggerErrors[assignment.id] {
+                    Text("\(assignment.app.name): \(message)")
+                }
+            }
+            if !delegate.flow.accessibilityGranted {
+                Text("Allow Accessibility in Settings to restore minimized windows.")
+            }
             if !delegate.flow.registrationErrors.isEmpty {
                 Text("A shortcut is unavailable. Open Settings to correct it.")
             }
@@ -21,7 +29,7 @@ struct PeekabooApp: App {
             Label {
                 Text("Peekaboo")
             } icon: {
-                if delegate.flow.errorMessage == nil && delegate.flow.registrationErrors.isEmpty {
+                if !delegate.flow.hasWarnings {
                     Image("MenuBarIcon").renderingMode(.template)
                 } else {
                     Image(systemName: "exclamationmark.triangle")

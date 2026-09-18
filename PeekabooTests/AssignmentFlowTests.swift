@@ -53,6 +53,17 @@ struct AssignmentFlowTests {
         await restarted.trigger(assignment.id)
         #expect(running.isActive)
         #expect(running.appWindows.first(where: { $0.id == older.id })?.isMinimized == true)
+
+        running.appWindows = []
+        await restarted.trigger(assignment.id)
+        #expect(running.isHidden)
+        #expect(!running.isActive)
+        await restarted.trigger(assignment.id)
+        #expect(!running.isHidden)
+        #expect(running.isActive)
+        await restarted.trigger(assignment.id)
+        #expect(running.isHidden)
+        #expect(restarted.triggerErrors.isEmpty)
     }
 
     @Test func unknownWindowHistoryDoesNotGuessAndRecoversAfterFocusIsObserved() async throws {
@@ -70,7 +81,7 @@ struct AssignmentFlowTests {
         let second = AppWindow(id: UUID(), isMinimized: true, focusOrder: nil)
         running.appWindows = [first, second]
         await flow.trigger(assignment.id)
-        #expect(flow.errorMessage?.contains("Open the window you want once") == true)
+        #expect(flow.triggerErrors[assignment.id]?.contains("Open the window you want once") == true)
         #expect(running.appWindows == [first, second])
         #expect(running.isActive)
 
@@ -78,15 +89,14 @@ struct AssignmentFlowTests {
         let visible = AppWindow(id: first.id, isMinimized: false, focusOrder: nil)
         running.appWindows = [visible, second]
         await flow.trigger(assignment.id)
-        #expect(flow.errorMessage?.contains("Open the window you want once") == true)
+        #expect(flow.triggerErrors[assignment.id]?.contains("Open the window you want once") == true)
         #expect(running.appWindows == [visible, second])
 
         running.appWindows = [first, AppWindow(id: second.id, isMinimized: true, focusOrder: 1)]
-        flow.errorMessage = nil
         await flow.trigger(assignment.id)
         #expect(running.appWindows.first == first)
         #expect(running.appWindows.last?.isMinimized == false)
-        #expect(flow.errorMessage == nil)
+        #expect(flow.triggerErrors.isEmpty)
         #expect(flow.assignments == [assignment])
     }
 
@@ -127,26 +137,33 @@ struct AssignmentFlowTests {
         running.isHidden = true
         await flow.trigger(assignment.id)
         #expect(!flow.accessibilityGranted)
-        #expect(flow.errorMessage == "Allow Accessibility in Settings.")
+        #expect(flow.hasWarnings)
+        #expect(flow.triggerErrors.isEmpty)
         #expect(!running.isHidden)
         #expect(running.isActive)
         await flow.trigger(assignment.id)
         #expect(running.isHidden)
         #expect(!running.isActive)
-        #expect(flow.errorMessage == "Allow Accessibility in Settings.")
+        #expect(flow.hasWarnings)
+        #expect(flow.triggerErrors.isEmpty)
         flow.requestAccessibilityAccess()
         #expect(fixture.workspace.accessibilityRequested)
         fixture.workspace.accessibilityGranted = true
         flow.refreshAccessibility()
         #expect(flow.accessibilityGranted)
+        #expect(!flow.hasWarnings)
         #expect(fixture.workspace.trackedApps == [fixture.app])
 
+        running.windowError = PeekabooError("Window access timed out.")
+        await flow.trigger(assignment.id)
+        #expect(flow.triggerErrors[assignment.id] == "Window access timed out.")
+        #expect(running.isActive)
         running.windowError = nil
         running.restoreError = PeekabooError("The window no longer exists.")
         let minimized = AppWindow(id: UUID(), isMinimized: true, focusOrder: 1)
         running.appWindows = [minimized]
         await flow.trigger(assignment.id)
-        #expect(flow.errorMessage == "The window no longer exists.")
+        #expect(flow.triggerErrors[assignment.id] == "The window no longer exists.")
         #expect(running.appWindows == [minimized])
         #expect(flow.assignments == [assignment])
 
@@ -158,8 +175,10 @@ struct AssignmentFlowTests {
         let second = try #require(flow.assignments.last)
         await flow.trigger(second.id)
         #expect(fixture.workspace.running[other.url]?.isActive == true)
+        #expect(flow.triggerErrors[assignment.id] == "The window no longer exists.")
         flow.deleteAssignment(assignment.id)
         #expect(fixture.workspace.trackedApps == [other])
+        #expect(flow.triggerErrors.isEmpty)
         flow.stopTracking()
         #expect(fixture.workspace.trackedApps.isEmpty)
     }
@@ -518,7 +537,8 @@ struct AssignmentFlowTests {
         #expect(fixture.workspace.launched == [fixture.app])
     }
 
-    @Test func launchingSuppressesRepeatedTriggersUntilCompletionAndRecoversAfterFailure() async throws {
+    @Test(arguments: [false, true])
+    func launchingSuppressesRepeatedTriggersUntilCompletionAndRecoversAfterFailure(deleteWhileLaunching: Bool) async throws {
         let fixture = try Fixture()
         defer { fixture.removeFiles() }
         let flow = fixture.flow()
@@ -534,14 +554,25 @@ struct AssignmentFlowTests {
         let continuation = try #require(fixture.workspace.launchContinuation)
         await flow.trigger(saved.id)
         #expect(fixture.workspace.launched == [fixture.app])
+        if deleteWhileLaunching { flow.deleteAssignment(saved.id) }
         continuation.resume()
         await launching.value
-        #expect(flow.errorMessage?.contains("Select it again") == true)
+        if deleteWhileLaunching {
+            #expect(flow.assignments.isEmpty)
+            #expect(flow.triggerErrors.isEmpty)
+            #expect(!flow.hasWarnings)
+            return
+        }
+        #expect(flow.triggerErrors[saved.id]?.contains("Select it again") == true)
         fixture.workspace.holdLaunch = false
         fixture.workspace.launchError = nil
+        fixture.workspace.accessibilityGranted = false
         await flow.trigger(saved.id)
         #expect(fixture.workspace.launched == [fixture.app, fixture.app])
         #expect(fixture.workspace.running[fixture.app.url]?.isActive == true)
+        #expect(flow.triggerErrors.isEmpty)
+        #expect(!flow.accessibilityGranted)
+        #expect(flow.hasWarnings)
     }
 
     @Test func refusedAppActionsReportErrorsAndOtherAssignmentsKeepWorking() async throws {
@@ -564,15 +595,69 @@ struct AssignmentFlowTests {
         running.isActive = true
         running.refuseHide = true
         await flow.trigger(first.id)
-        #expect(flow.errorMessage == "Could not hide Editor.")
+        #expect(flow.triggerErrors[first.id] == "Could not hide Editor.")
+        #expect(flow.hasWarnings)
+        running.refuseHide = false
+        await flow.trigger(first.id)
+        #expect(flow.triggerErrors.isEmpty)
+        #expect(!flow.hasWarnings)
         running.isActive = false
         running.isHidden = true
         running.refuseActivation = true
         await flow.trigger(first.id)
-        #expect(flow.errorMessage?.contains("Could not activate Editor") == true)
+        let firstError = try #require(flow.triggerErrors[first.id])
+        #expect(firstError.contains("Could not activate Editor"))
         await flow.trigger(second.id)
         #expect(fixture.workspace.running[other.url]?.isActive == true)
+        #expect(flow.triggerErrors[first.id] == firstError)
         #expect(flow.assignments == [first, second])
+
+        let otherRunning = try #require(fixture.workspace.running[other.url])
+        otherRunning.refuseHide = true
+        await flow.trigger(second.id)
+        #expect(flow.triggerErrors[second.id] == "Could not hide Other.")
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording(for: first.id)
+        flow.cancelRecording()
+        #expect(flow.triggerErrors[first.id] == firstError)
+        #expect(flow.triggerErrors[second.id] == "Could not hide Other.")
+
+        let malformed = Data("this is not JSON".utf8)
+        try malformed.write(to: fixture.store.url)
+        flow.load()
+        let settingsError = try #require(flow.errorMessage)
+        running.refuseActivation = false
+        await flow.trigger(first.id)
+        #expect(flow.triggerErrors[first.id] == nil)
+        #expect(flow.triggerErrors[second.id] == "Could not hide Other.")
+        #expect(flow.errorMessage == settingsError)
+        #expect(flow.hasWarnings)
+        otherRunning.refuseHide = false
+        await flow.trigger(second.id)
+        #expect(flow.triggerErrors.isEmpty)
+        #expect(flow.errorMessage == settingsError)
+        try fixture.store.save([first, second])
+        flow.load()
+        #expect(flow.errorMessage == nil)
+        #expect(!flow.hasWarnings)
+
+        running.refuseHide = true
+        await flow.trigger(first.id)
+        #expect(flow.triggerErrors[first.id] == "Could not hide Editor.")
+        flow.selectApplication(at: other.url, replacing: first.id)
+        flow.beginRecording(for: first.id)
+        try fixture.record(flow)
+        #expect(flow.assignments.first?.app == other)
+        #expect(flow.triggerErrors.isEmpty)
+
+        otherRunning.refuseActivation = true
+        await flow.trigger(second.id)
+        #expect(flow.triggerErrors[second.id]?.contains("Could not activate Other") == true)
+        try fixture.store.save([])
+        flow.load()
+        #expect(flow.assignments.isEmpty)
+        #expect(flow.triggerErrors.isEmpty)
     }
 
     @Test func failedSelectionCannotReusePreviousDraft() throws {
