@@ -23,6 +23,30 @@ final class CarbonHotkeys: HotkeyRegistry {
     private var pressed: Set<UInt32> = []
     private var nextID: UInt32 = 1
 
+    func systemShortcuts() throws -> [SystemShortcut] {
+        var rawShortcuts: Unmanaged<CFArray>?
+        let status = CopySymbolicHotKeys(&rawShortcuts)
+        guard status == noErr, let rawShortcuts else {
+            throw PeekabooError("macOS could not inspect Keyboard Shortcuts (status \(status)).")
+        }
+        let entries = rawShortcuts.takeRetainedValue() as [AnyObject]
+        return try entries.map { value in
+            guard let entry = value as? [String: Any],
+                  let keyCode = entry[kHISymbolicHotKeyCode] as? NSNumber,
+                  let modifiers = entry[kHISymbolicHotKeyModifiers] as? NSNumber,
+                  let isEnabled = entry[kHISymbolicHotKeyEnabled] as? NSNumber,
+                  keyCode.int64Value >= 0, keyCode.int64Value <= Int64(UInt16.max),
+                  modifiers.uint64Value <= UInt64(UInt32.max) else {
+                throw PeekabooError("macOS returned invalid Keyboard Shortcuts data.")
+            }
+            return SystemShortcut(
+                keyCode: UInt16(keyCode.int64Value),
+                modifiers: UInt32(modifiers.uint64Value),
+                isEnabled: isEnabled.boolValue
+            )
+        }
+    }
+
     func register(_ shortcut: Shortcut, action: @escaping @MainActor () -> Void) throws -> UUID {
         try shortcut.validate()
         try installHandler()

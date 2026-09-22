@@ -18,12 +18,13 @@ final class AssignmentFlow {
     private(set) var selectedApp: SelectedApp?
     private(set) var isRecording = false
     private(set) var recordingAssignmentID: UUID?
+    var systemShortcutConflict: Shortcut? { pendingConflictCandidate?.shortcut }
     var errorMessage: String?
     var triggerErrors: [UUID: String] = [:]
     private(set) var registrationErrors: [UUID: String] = [:]
 
     var hasWarnings: Bool {
-        !accessibilityGranted || errorMessage != nil || !triggerErrors.isEmpty || !registrationErrors.isEmpty
+        !accessibilityGranted || systemShortcutConflict != nil || errorMessage != nil || !triggerErrors.isEmpty || !registrationErrors.isEmpty
     }
 
     private let store: AssignmentStore
@@ -35,6 +36,7 @@ final class AssignmentFlow {
     private var pendingCleanup = Set<UUID>()
     private var inFlight = Set<UUID>()
     private var pendingShortcut: Shortcut?
+    private var pendingConflictCandidate: Assignment?
     private(set) var replacingID: UUID?
     private var canSave = false
 
@@ -46,6 +48,7 @@ final class AssignmentFlow {
 
     func load() {
         guard !isRecording else { return }
+        cancelSystemShortcutConflict()
         startMonitoringAccessibility()
         refreshAccessibility()
         do {
@@ -104,6 +107,7 @@ final class AssignmentFlow {
 
     @discardableResult
     func selectApplication(at url: URL, replacing id: UUID? = nil) -> Bool {
+        cancelSystemShortcutConflict()
         do {
             selectedApp = try workspace.selectApplication(at: url)
             replacingID = id
@@ -119,6 +123,7 @@ final class AssignmentFlow {
 
     func beginRecording(for id: UUID? = nil) {
         guard !isRecording else { return }
+        cancelSystemShortcutConflict()
         guard canSave else {
             errorMessage = "Reload assignments successfully before making changes. Saved file: \(store.url.path)"
             return
@@ -177,8 +182,19 @@ final class AssignmentFlow {
         restoreRegistrations()
     }
 
+    func cancelSystemShortcutConflict() {
+        pendingConflictCandidate = nil
+    }
+
+    func useConflictingShortcut() {
+        guard let candidate = pendingConflictCandidate else { return }
+        cancelSystemShortcutConflict()
+        save(candidate)
+    }
+
     func deleteAssignment(_ id: UUID) {
         guard !isRecording else { return }
+        cancelSystemShortcutConflict()
         guard canSave else {
             errorMessage = "Reload assignments successfully before making changes. Saved file: \(store.url.path)"
             return
@@ -264,6 +280,28 @@ final class AssignmentFlow {
             return
         }
         let candidate = Assignment(id: id, app: app, shortcut: shortcut)
+        do {
+            guard try hasEnabledSystemConflict(shortcut) else {
+                save(candidate)
+                return
+            }
+            pendingConflictCandidate = candidate
+            errorMessage = nil
+        } catch {
+            errorMessage = "System shortcut check unavailable: \(error.localizedDescription)\nRecord the shortcut again to retry the check."
+        }
+    }
+
+    private func hasEnabledSystemConflict(_ shortcut: Shortcut) throws -> Bool {
+        return try hotkeys.systemShortcuts().contains {
+            $0.isEnabled && $0.keyCode == shortcut.keyCode &&
+                $0.modifiers & Shortcut.allowedModifiers == shortcut.modifiers
+        }
+    }
+
+    private func save(_ candidate: Assignment) {
+        let id = candidate.id
+        let shortcut = candidate.shortcut
         var updated = assignments
         if let index = updated.firstIndex(where: { $0.id == id }) { updated[index] = candidate }
         else { updated.append(candidate) }

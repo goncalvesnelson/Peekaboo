@@ -13,7 +13,15 @@ struct Assignment: Codable, Equatable, Identifiable, Sendable {
     let shortcut: Shortcut
 }
 
+struct SystemShortcut: Equatable, Sendable {
+    let keyCode: UInt16
+    let modifiers: UInt32
+    let isEnabled: Bool
+}
+
 struct Shortcut: Codable, Equatable, Sendable {
+    static let allowedModifiers = UInt32(cmdKey | controlKey | optionKey | shiftKey)
+
     let keyCode: UInt16
     let modifiers: UInt32
     let keyLabel: String
@@ -31,8 +39,7 @@ struct Shortcut: Codable, Equatable, Sendable {
     }
 
     func validate() throws {
-        let allowed = UInt32(cmdKey | controlKey | optionKey | shiftKey)
-        guard keyCode <= 127, modifiers & ~allowed == 0,
+        guard keyCode <= 127, modifiers & ~Self.allowedModifiers == 0,
               modifiers & UInt32(cmdKey | controlKey | optionKey) != 0,
               !keyLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw PeekabooError("Use a key with Command, Control, or Option. Escape cancels recording.")
@@ -101,6 +108,7 @@ struct PeekabooError: LocalizedError {
 
 @MainActor
 protocol HotkeyRegistry: AnyObject {
+    func systemShortcuts() throws -> [SystemShortcut]
     func register(_ shortcut: Shortcut, action: @escaping @MainActor () -> Void) throws -> UUID
     func unregister(_ registration: UUID) throws
 }

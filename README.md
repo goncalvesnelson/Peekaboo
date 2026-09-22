@@ -57,6 +57,8 @@ Selecting **Settings…** again brings the existing Settings window forward, eve
 
 Click an assignment's shortcut field to edit it. The field shows a focus outline while recording. A rejected replacement keeps the previous assignment. Errors appear in settings and the menu bar; a failed startup registration leaves the assignment visible for correction. Choosing the same shortcut again retries its registration.
 
+Before saving, Peekaboo compares the recorded combination with enabled macOS Keyboard Shortcuts, even when the combination is unchanged. A match opens a native warning with **Cancel** and **Use Anyway**. Cancel keeps the previous assignment. Use Anyway saves using the existing registration when the shortcut is unchanged and still registered; otherwise it attempts native registration and saves only if that succeeds. If macOS shortcut inspection is unavailable, Peekaboo reports that the check failed and does not change the assignment. Record the shortcut again to retry the check.
+
 Toggle errors appear with the affected assignment and clear after that assignment toggles successfully. You can also dismiss them. Settings actions and toggles for other assignments do not clear them, and successful toggles do not clear Settings errors. Removing an assignment or replacing its app removes its old toggle error.
 
 The **trash button** removes the app–shortcut pairing and releases its global shortcut. If saving fails, the assignment stays usable. If macOS cannot release a deleted shortcut, Peekaboo reports the cleanup error; use **Reload Saved Assignments** to retry.
@@ -81,6 +83,6 @@ Activation requests bring non-minimized windows forward. Peekaboo does not chang
 
 Shortcut labels reflect the keyboard layout used during recording. Command, Control, Option, and Shift flags are normalized; the label includes recognizable names or glyphs for special keys. Shortcuts use physical key codes, so re-record them if you change layouts and want a different physical combination.
 
-This slice handles registration failures and Peekaboo's own duplicate shortcuts. Configured macOS system-conflict warnings are separate work. A successful registration does not prove that macOS or another app cannot intercept the combination.
+Peekaboo rejects duplicate shortcuts within its own assignments. **Use Anyway** applies only to a known macOS system shortcut and cannot bypass that rule. The conflict check covers enabled shortcuts reported by macOS, not application-specific shortcuts or every way a combination can be intercepted. A successful registration does not prove that macOS or another app will deliver the combination to Peekaboo.
 
 See [native checks](docs/native-checks.md) for interactive steps and recorded results. Passing automated tests does not establish physical global shortcut delivery, window behavior, or Space switching.

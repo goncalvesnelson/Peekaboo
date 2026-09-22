@@ -8,6 +8,9 @@ struct PeekabooApp: App {
     var body: some Scene {
         MenuBarExtra {
             SettingsButton()
+            if let shortcut = delegate.flow.systemShortcutConflict {
+                Text("\(shortcut.label) is assigned in macOS Keyboard Shortcuts. Open Settings to review it.")
+            }
             if let message = delegate.flow.errorMessage {
                 Text(message)
             }

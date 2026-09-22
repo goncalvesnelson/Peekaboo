@@ -78,6 +78,11 @@ struct NativeFlowTests {
         let store = AssignmentStore(url: directory.appending(path: "assignments.json"))
         let flow = AssignmentFlow(store: store, hotkeys: hotkeys, workspace: NativeWorkspace())
         flow.load()
+        let systemShortcuts = try hotkeys.systemShortcuts()
+        #expect(!systemShortcuts.isEmpty)
+        #expect(systemShortcuts.contains {
+            $0.isEnabled && $0.modifiers & UInt32(cmdKey | controlKey | optionKey) != 0
+        })
         #expect(!flow.selectApplication(at: directory.appending(path: "invalid.txt")))
         #expect(flow.errorMessage?.contains("Choose an installed .app") == true)
         #expect(flow.selectApplication(at: URL(fileURLWithPath: "/System/Applications/TextEdit.app")))
@@ -88,6 +93,16 @@ struct NativeFlowTests {
         let original = try #require(flow.assignments.first)
         #expect(original.shortcut.label == "⌃⌥⇧⌘F19")
         #expect(flow.errorMessage == nil)
+
+        let optionShortcut = Shortcut(keyCode: UInt16(kVK_F18), modifiers: UInt32(optionKey), keyLabel: "F18")
+        let optionRegistration = try hotkeys.register(optionShortcut) {}
+        #expect(throws: (any Error).self) { try hotkeys.register(optionShortcut) {} }
+        try hotkeys.unregister(optionRegistration)
+        let optionShiftShortcut = Shortcut(
+            keyCode: UInt16(kVK_F18), modifiers: UInt32(optionKey | shiftKey), keyLabel: "F18"
+        )
+        let optionShiftRegistration = try hotkeys.register(optionShiftShortcut) {}
+        try hotkeys.unregister(optionShiftRegistration)
 
         let occupied = Shortcut(keyCode: UInt16(kVK_F20), modifiers: UInt32(cmdKey | controlKey | optionKey | shiftKey), keyLabel: "F20")
         let competitor = try hotkeys.register(occupied) {}

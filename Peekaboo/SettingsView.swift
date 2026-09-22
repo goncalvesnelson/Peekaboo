@@ -108,6 +108,19 @@ struct SettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
             flow.cancelRecording()
         }
+        .alert(
+            "Shortcut assigned in macOS Keyboard Shortcuts",
+            isPresented: Binding(
+                get: { flow.systemShortcutConflict != nil },
+                set: { _ in }
+            ),
+            presenting: flow.systemShortcutConflict
+        ) { _ in
+            Button("Use Anyway") { flow.useConflictingShortcut() }
+            Button("Cancel", role: .cancel) { flow.cancelSystemShortcutConflict() }
+        } message: { shortcut in
+            Text("\(shortcut.label) matches an enabled shortcut in macOS Keyboard Shortcuts. Peekaboo can try to use it, but macOS or another app may still intercept it even if registration succeeds.")
+        }
     }
 
     private func assignmentRow(_ assignment: Assignment) -> some View {

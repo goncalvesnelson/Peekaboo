@@ -258,6 +258,296 @@ struct AssignmentFlowTests {
         #expect(flow.assignments.first?.shortcut.label == "⌃⌥Space")
     }
 
+    @Test(arguments: [UInt32(alphaLock), UInt32(kEventKeyModifierFnMask)])
+    func enabledSystemConflictCanBeCancelledBeforeSaving(ignoredModifier: UInt32) throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 0, modifiers: UInt32(controlKey | optionKey) | ignoredModifier, isEnabled: true)
+        ]
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        #expect(!flow.hasWarnings)
+
+        try fixture.record(flow)
+
+        #expect(flow.assignments.isEmpty)
+        #expect(flow.systemShortcutConflict?.label == "⌃⌥A")
+        #expect(flow.hasWarnings)
+        #expect(fixture.hotkeys.registrations.isEmpty)
+        flow.cancelSystemShortcutConflict()
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.assignments.isEmpty)
+        #expect(!flow.hasWarnings)
+        let restarted = fixture.flow(hotkeys: FakeHotkeys())
+        restarted.load()
+        #expect(restarted.assignments.isEmpty)
+    }
+
+    @Test func disabledAndNonMatchingSystemShortcutsSaveWithoutWarning() throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 0, modifiers: UInt32(controlKey | optionKey), isEnabled: false),
+            SystemShortcut(keyCode: 1, modifiers: UInt32(controlKey | optionKey), isEnabled: true),
+            SystemShortcut(keyCode: 0, modifiers: UInt32(controlKey), isEnabled: true),
+            SystemShortcut(keyCode: 0, modifiers: UInt32(cmdKey | controlKey | optionKey), isEnabled: true)
+        ]
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+
+        try fixture.record(flow)
+
+        #expect(flow.assignments.count == 1)
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.errorMessage == nil)
+        #expect(fixture.hotkeys.registrations.values.first?.shortcut.keyCode == 0)
+    }
+
+    @Test func acknowledgedSystemConflictSavesAndRegistersNewAssignment() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 0, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        #expect(!flow.hasWarnings)
+        try fixture.record(flow)
+        #expect(flow.hasWarnings)
+        #expect(flow.assignments.isEmpty)
+        #expect(fixture.hotkeys.registrations.isEmpty)
+
+        flow.useConflictingShortcut()
+
+        let saved = try #require(flow.assignments.first)
+        #expect(saved.app == fixture.app)
+        #expect(saved.shortcut.label == "⌃⌥A")
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(!flow.hasWarnings)
+        #expect(fixture.hotkeys.registrations.count == 1)
+        let registration = try #require(fixture.hotkeys.registrations.values.first)
+        #expect(registration.shortcut == saved.shortcut)
+        registration.action()
+        await fixture.workspace.waitForLaunch()
+        #expect(fixture.workspace.launched == [fixture.app])
+        #expect(fixture.workspace.running[fixture.app.url]?.isActive == true)
+        await flow.trigger(saved.id)
+        #expect(fixture.workspace.running[fixture.app.url]?.isHidden == true)
+        let restarted = fixture.flow(hotkeys: FakeHotkeys())
+        restarted.load()
+        #expect(restarted.assignments == [saved])
+    }
+
+    @Test func selectingAnotherApplicationDiscardsPendingSystemConflict() throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 0, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        #expect(flow.systemShortcutConflict != nil)
+        let other = SelectedApp(
+            bundleIdentifier: "test.other", url: URL(fileURLWithPath: "/Applications/Other.app"), name: "Other"
+        )
+        fixture.workspace.selections[other.url] = other
+
+        flow.selectApplication(at: other.url)
+        flow.useConflictingShortcut()
+
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.selectedApp == other)
+        #expect(flow.assignments.isEmpty)
+        #expect(fixture.hotkeys.registrations.isEmpty)
+        #expect(try fixture.store.load().isEmpty)
+        flow.beginRecording()
+        try fixture.record(flow, keyCode: 1, characters: "s")
+        let saved = try #require(flow.assignments.first)
+        #expect(saved.app == other)
+        #expect(saved.shortcut.keyCode == 1)
+        #expect(try fixture.store.load() == [saved])
+    }
+
+    @Test func recordingAgainDiscardsPendingSystemConflict() throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 0, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        #expect(flow.systemShortcutConflict != nil)
+
+        flow.beginRecording()
+        flow.useConflictingShortcut()
+
+        #expect(flow.isRecording)
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.assignments.isEmpty)
+        #expect(fixture.hotkeys.registrations.isEmpty)
+        #expect(try fixture.store.load().isEmpty)
+        try fixture.record(flow, keyCode: 1, characters: "s")
+        let saved = try #require(flow.assignments.first)
+        #expect(saved.app == fixture.app)
+        #expect(saved.shortcut.keyCode == 1)
+        #expect(try fixture.store.load() == [saved])
+    }
+
+    @Test func cancellingEditedSystemConflictKeepsPreviousShortcutWorking() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        let original = try #require(flow.assignments.first)
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 1, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+
+        flow.beginRecording(for: original.id)
+        try fixture.record(flow, keyCode: 1, characters: "s")
+        flow.cancelSystemShortcutConflict()
+
+        #expect(flow.assignments == [original])
+        #expect(flow.systemShortcutConflict == nil)
+        let working = try #require(fixture.hotkeys.registrations.values.first)
+        #expect(working.shortcut == original.shortcut)
+        working.action()
+        await fixture.workspace.waitForLaunch()
+        #expect(fixture.workspace.launched == [fixture.app])
+    }
+
+    @Test func acknowledgedSystemConflictSavesAndRegistersReplacement() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        let original = try #require(flow.assignments.first)
+        let other = SelectedApp(
+            bundleIdentifier: "test.other", url: URL(fileURLWithPath: "/Applications/Other.app"), name: "Other"
+        )
+        fixture.workspace.selections[other.url] = other
+        flow.selectApplication(at: other.url)
+        flow.beginRecording()
+        try fixture.record(flow, keyCode: 2, characters: "d")
+        let second = try #require(flow.assignments.last)
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 1, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+
+        flow.beginRecording(for: original.id)
+        try fixture.record(flow, keyCode: 1, characters: "s")
+
+        #expect(flow.assignments == [original, second])
+        #expect(flow.systemShortcutConflict?.label == "⌃⌥S")
+        #expect(fixture.hotkeys.registrations.values.contains(where: { $0.shortcut == original.shortcut }))
+        flow.useConflictingShortcut()
+        let replacement = try #require(flow.assignments.first)
+        #expect(replacement.shortcut.keyCode == 1)
+        #expect(flow.assignments.last == second)
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.errorMessage == nil)
+        let replacementRegistration = try #require(
+            fixture.hotkeys.registrations.values.first(where: { $0.shortcut == replacement.shortcut })
+        )
+        replacementRegistration.action()
+        await fixture.workspace.waitForLaunch()
+        #expect(fixture.workspace.launched == [fixture.app])
+        let restarted = fixture.flow(hotkeys: FakeHotkeys())
+        restarted.load()
+        #expect(restarted.assignments == [replacement, second])
+    }
+
+    @Test func failedAcknowledgedRegistrationPreservesWorkingAssignment() async throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        let original = try #require(flow.assignments.first)
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 1, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+        fixture.hotkeys.rejectedKeys = [1]
+
+        flow.beginRecording(for: original.id)
+        try fixture.record(flow, keyCode: 1, characters: "s")
+        flow.useConflictingShortcut()
+
+        #expect(flow.assignments == [original])
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.errorMessage == "Shortcut unavailable")
+        let working = try #require(fixture.hotkeys.registrations.values.first)
+        #expect(working.shortcut == original.shortcut)
+        working.action()
+        await fixture.workspace.waitForLaunch()
+        #expect(fixture.workspace.launched == [fixture.app])
+        let restarted = fixture.flow(hotkeys: FakeHotkeys())
+        restarted.load()
+        #expect(restarted.assignments == [original])
+    }
+
+    @Test func systemShortcutInspectionFailurePreservesAssignmentAndRecordingAgainRetries() throws {
+        let fixture = try Fixture()
+        defer { fixture.removeFiles() }
+        let flow = fixture.flow()
+        flow.load()
+        flow.selectApplication(at: fixture.app.url)
+        flow.beginRecording()
+        try fixture.record(flow)
+        let original = try #require(flow.assignments.first)
+        let savedData = try Data(contentsOf: fixture.store.url)
+        fixture.hotkeys.systemShortcutError = PeekabooError("Inspection failed")
+
+        flow.beginRecording(for: original.id)
+        try fixture.record(flow, keyCode: 1, characters: "s")
+
+        #expect(flow.assignments == [original])
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.errorMessage == "System shortcut check unavailable: Inspection failed\nRecord the shortcut again to retry the check.")
+        #expect(fixture.hotkeys.registrations.values.first?.shortcut == original.shortcut)
+        #expect(try Data(contentsOf: fixture.store.url) == savedData)
+        let restarted = fixture.flow(hotkeys: FakeHotkeys())
+        restarted.load()
+        #expect(restarted.assignments == [original])
+
+        fixture.hotkeys.systemShortcutError = nil
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 1, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+        flow.beginRecording(for: original.id)
+        #expect(flow.errorMessage == nil)
+        try fixture.record(flow, keyCode: 1, characters: "s")
+        #expect(flow.systemShortcutConflict?.keyCode == 1)
+        #expect(flow.assignments == [original])
+        flow.useConflictingShortcut()
+        let replacement = try #require(flow.assignments.first)
+        #expect(replacement.id == original.id)
+        #expect(replacement.shortcut.keyCode == 1)
+        #expect(!flow.hasWarnings)
+        #expect(try fixture.store.load() == [replacement])
+    }
+
     @Test func duplicateAndUnavailableReplacementKeepOriginalAssignmentWorking() async throws {
         let fixture = try Fixture()
         defer { fixture.removeFiles() }
@@ -271,10 +561,14 @@ struct AssignmentFlowTests {
         flow.beginRecording()
         try fixture.record(flow, keyCode: 1, characters: "s")
         let second = try #require(flow.assignments.last)
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 1, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
         flow.beginRecording(for: original.id)
         try fixture.record(flow, keyCode: 1, characters: "s")
         #expect(flow.assignments == [original, second])
         #expect(flow.errorMessage?.contains("already belongs") == true)
+        #expect(flow.systemShortcutConflict == nil)
         fixture.hotkeys.rejectedKeys = [2]
         flow.beginRecording(for: original.id)
         try fixture.record(flow, keyCode: 2, characters: "d")
@@ -294,7 +588,8 @@ struct AssignmentFlowTests {
         #expect(flow.assignments.last == second)
     }
 
-    @Test func appReplacementUsesSelectedCopyAndKeepsSameShortcut() async throws {
+    @Test(arguments: [false, true])
+    func appReplacementKeepsUnchangedShortcutAndReusesRegistration(hasSystemConflict: Bool) async throws {
         let fixture = try Fixture()
         defer { fixture.removeFiles() }
         let flow = fixture.flow()
@@ -306,13 +601,25 @@ struct AssignmentFlowTests {
         let copy = SelectedApp(bundleIdentifier: fixture.app.bundleIdentifier,
                                url: URL(fileURLWithPath: "/Other/Editor.app"), name: "Other editor")
         fixture.workspace.selections[copy.url] = copy
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 0, modifiers: UInt32(controlKey | optionKey), isEnabled: hasSystemConflict)
+        ]
         #expect(flow.selectApplication(at: copy.url, replacing: original.id))
         flow.beginRecording(for: original.id)
         try fixture.record(flow)
+        if hasSystemConflict {
+            #expect(flow.assignments == [original])
+            #expect(flow.systemShortcutConflict == original.shortcut)
+            let restoredRegistrationID = try #require(fixture.hotkeys.registrations.keys.first)
+            flow.useConflictingShortcut()
+            #expect(Set(fixture.hotkeys.registrations.keys) == [restoredRegistrationID])
+        }
         let replacement = try #require(flow.assignments.first)
         #expect(replacement.id == original.id)
         #expect(replacement.app == copy)
         #expect(replacement.shortcut == original.shortcut)
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(!flow.hasWarnings)
         try #require(fixture.hotkeys.registrations.values.first).action()
         await fixture.workspace.waitForLaunch()
         #expect(fixture.workspace.launched == [copy])
@@ -363,12 +670,21 @@ struct AssignmentFlowTests {
         flow.beginRecording()
         try fixture.record(flow, keyCode: 1, characters: "s")
         let remaining = try #require(flow.assignments.last)
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 2, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+        flow.beginRecording(for: deleted.id)
+        try fixture.record(flow, keyCode: 2, characters: "d")
+        #expect(flow.systemShortcutConflict != nil)
         let stale = try #require(fixture.hotkeys.registrations.values.first(where: { $0.shortcut.keyCode == 0 })).action
 
         flow.deleteAssignment(deleted.id)
+        flow.useConflictingShortcut()
         #expect(flow.assignments == [remaining])
+        #expect(flow.systemShortcutConflict == nil)
         #expect(flow.errorMessage == nil)
-        #expect(!fixture.hotkeys.registrations.values.contains(where: { $0.shortcut.keyCode == 0 }))
+        #expect(fixture.hotkeys.registrations.count == 1)
+        #expect(fixture.hotkeys.registrations.values.first?.shortcut == remaining.shortcut)
         stale()
         await Task.yield()
         #expect(fixture.workspace.launched.isEmpty)
@@ -466,9 +782,20 @@ struct AssignmentFlowTests {
         flow.beginRecording()
         try fixture.record(flow)
         let saved = try #require(flow.assignments.first)
+        fixture.hotkeys.configuredSystemShortcuts = [
+            SystemShortcut(keyCode: 1, modifiers: UInt32(controlKey | optionKey), isEnabled: true)
+        ]
+        flow.beginRecording(for: saved.id)
+        try fixture.record(flow, keyCode: 1, characters: "s")
+        #expect(flow.systemShortcutConflict != nil)
         let malformed = Data("this is not JSON".utf8)
         try malformed.write(to: fixture.store.url)
         flow.load()
+        flow.useConflictingShortcut()
+        #expect(flow.systemShortcutConflict == nil)
+        #expect(flow.assignments == [saved])
+        #expect(fixture.hotkeys.registrations.values.first?.shortcut == saved.shortcut)
+        #expect(try Data(contentsOf: fixture.store.url) == malformed)
         #expect(flow.errorMessage?.contains(fixture.store.url.path) == true)
         flow.deleteAssignment(saved.id)
         #expect(flow.assignments == [saved])
@@ -856,9 +1183,16 @@ private final class FakeHotkeys: HotkeyRegistry {
 
     var registrations: [UUID: Registration] = [:]
     var rejectedKeys: Set<UInt16> = []
+    var configuredSystemShortcuts: [SystemShortcut] = []
+    var systemShortcutError: PeekabooError?
     var rejectUnregister = false
     var successfulUnregistrations = 0
     var failUnregisterAfter: Int?
+
+    func systemShortcuts() throws -> [SystemShortcut] {
+        if let systemShortcutError { throw systemShortcutError }
+        return configuredSystemShortcuts
+    }
 
     func register(_ shortcut: Shortcut, action: @escaping @MainActor () -> Void) throws -> UUID {
         guard !rejectedKeys.contains(shortcut.keyCode),
