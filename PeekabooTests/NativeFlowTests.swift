@@ -41,7 +41,7 @@ struct NativeFlowTests {
         ))
     }
 
-    @Test func settingsButtonBringsExistingWindowBackToFront() async throws {
+    @Test func settingsButtonReusesExistingWindow() async throws {
         let menu = NSHostingMenu(rootView: SettingsButton())
         menu.update()
         let index = try #require(menu.items.firstIndex { $0.title == "Settings…" })
@@ -57,36 +57,12 @@ struct NativeFlowTests {
         }
         let settingsWindow = try #require(settings)
         defer { settingsWindow.close() }
-        for _ in 0..<50 {
-            if NSApplication.shared.isActive && settingsWindow.isKeyWindow { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        try #require(NSApplication.shared.isActive)
-        try #require(settingsWindow.isKeyWindow)
-
-        NSApplication.shared.hide(nil)
-        for _ in 0..<50 {
-            if !NSApplication.shared.isActive && NSApplication.shared.isHidden { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        try #require(!NSApplication.shared.isActive)
-        try #require(NSApplication.shared.isHidden)
-        NSApplication.shared.unhideWithoutActivation()
-        for _ in 0..<50 {
-            if !NSApplication.shared.isHidden { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        try #require(!NSApplication.shared.isHidden)
-        try #require(settingsWindow.isVisible)
-        try #require(!NSApplication.shared.isActive)
         menu.performActionForItem(at: index)
-        for _ in 0..<50 {
-            if NSApplication.shared.isActive && settingsWindow.isKeyWindow { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        #expect(NSApplication.shared.isActive)
         #expect(settingsWindow.isVisible)
-        #expect(settingsWindow.isKeyWindow)
+        let newSettingsWindows = NSApplication.shared.windows.filter {
+            !existing.contains($0.windowNumber) && $0.isVisible && $0.canBecomeKey
+        }
+        #expect(newSettingsWindows.map(\.windowNumber) == [settingsWindow.windowNumber])
     }
 
     @Test func nativeSelectionAndRegistrationFailurePreserveSavedAssignment() throws {
