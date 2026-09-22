@@ -12,6 +12,35 @@ struct NativeFlowTests {
         #expect(!NativeAccessibilityWindowAccess.isClosedWindowError(.cannotComplete))
     }
 
+    @Test func trackedTerminationRefreshesWithoutBundleIdentifier() {
+        let selectedBundleIdentifiers: Set<String> = ["test.editor"]
+
+        #expect(NativeWorkspace.shouldRefreshApplications(
+            for: NSWorkspace.didTerminateApplicationNotification,
+            bundleIdentifier: nil,
+            processIsTracked: true,
+            selectedBundleIdentifiers: selectedBundleIdentifiers
+        ))
+        #expect(!NativeWorkspace.shouldRefreshApplications(
+            for: NSWorkspace.didTerminateApplicationNotification,
+            bundleIdentifier: nil,
+            processIsTracked: false,
+            selectedBundleIdentifiers: selectedBundleIdentifiers
+        ))
+        #expect(NativeWorkspace.shouldRefreshApplications(
+            for: NSWorkspace.didActivateApplicationNotification,
+            bundleIdentifier: "test.editor",
+            processIsTracked: false,
+            selectedBundleIdentifiers: selectedBundleIdentifiers
+        ))
+        #expect(!NativeWorkspace.shouldRefreshApplications(
+            for: NSWorkspace.didActivateApplicationNotification,
+            bundleIdentifier: nil,
+            processIsTracked: true,
+            selectedBundleIdentifiers: selectedBundleIdentifiers
+        ))
+    }
+
     @Test func settingsButtonBringsExistingWindowBackToFront() async throws {
         let menu = NSHostingMenu(rootView: SettingsButton())
         menu.update()

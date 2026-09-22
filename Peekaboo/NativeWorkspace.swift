@@ -4,6 +4,7 @@ import ApplicationServices
 @MainActor
 final class NativeWorkspace: NSObject, AppWorkspace {
     private var selectedApps: [SelectedApp] = []
+    private var selectedBundleIdentifiers = Set<String>()
     private var runningApps: [pid_t: NativeRunningApp] = [:]
     private var observingWorkspace = false
 
@@ -17,6 +18,7 @@ final class NativeWorkspace: NSObject, AppWorkspace {
 
     func trackApplications(_ apps: [SelectedApp]) {
         selectedApps = apps
+        selectedBundleIdentifiers = Set(apps.map(\.bundleIdentifier))
         let center = NSWorkspace.shared.notificationCenter
         if apps.isEmpty {
             center.removeObserver(self)
@@ -33,7 +35,25 @@ final class NativeWorkspace: NSObject, AppWorkspace {
     }
 
     @objc private func applicationsChanged(_ notification: Notification) {
+        guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              Self.shouldRefreshApplications(
+                for: notification.name,
+                bundleIdentifier: application.bundleIdentifier,
+                processIsTracked: runningApps[application.processIdentifier] != nil,
+                selectedBundleIdentifiers: selectedBundleIdentifiers
+              ) else { return }
         refreshApplications()
+    }
+
+    static func shouldRefreshApplications(
+        for notification: Notification.Name,
+        bundleIdentifier: String?,
+        processIsTracked: Bool,
+        selectedBundleIdentifiers: Set<String>
+    ) -> Bool {
+        if notification == NSWorkspace.didTerminateApplicationNotification { return processIsTracked }
+        guard let bundleIdentifier else { return false }
+        return selectedBundleIdentifiers.contains(bundleIdentifier)
     }
 
     private func refreshApplications() {
@@ -137,7 +157,6 @@ private final class NativeRunningApp: RunningApp {
     init(application: NSRunningApplication) {
         self.application = application
         windowTracker = AccessibilityWindows(application: application)
-        windowTracker.observeCurrentFocus()
     }
 
     func windows() throws -> [AppWindow] { try windowTracker.windows() }
