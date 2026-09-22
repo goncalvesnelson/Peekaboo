@@ -4,7 +4,7 @@ import Testing
 
 @MainActor
 struct AccessibilityWindowsTests {
-    @Test(arguments: FocusFailure.allCases)
+    @Test(arguments: [FocusFailure.start, .windows, .focusedWindow])
     func failedFocusObservationRetainsHistoryAndRecovers(failure: FocusFailure) throws {
         let access = FakeAccessibilityWindowAccess()
         let tracker = AccessibilityWindows(access: access)
@@ -44,6 +44,32 @@ struct AccessibilityWindowsTests {
         try tracker.restoreWindow(recovered[0].id)
         let restoredFirst = try #require(access.restored)
         #expect(CFEqual(restoredFirst, access.first))
+    }
+
+    @Test func invalidWindowStateSkipsOnlyThatWindowAndPreservesIdentity() throws {
+        let access = FakeAccessibilityWindowAccess()
+        let tracker = AccessibilityWindows(access: access)
+        tracker.observeCurrentFocus()
+        access.isActive = false
+        let original = try tracker.windows()
+
+        access.failure = .invalidWindowState
+        let available = try tracker.windows()
+        #expect(available == [original[0]])
+        #expect(access.failureCount == 1)
+
+        access.failure = nil
+        #expect(try tracker.windows() == original)
+    }
+
+    @Test func activeSnapshotAndRestorationEnumerateWindowsOnce() throws {
+        let access = FakeAccessibilityWindowAccess()
+        let tracker = AccessibilityWindows(access: access)
+
+        let windows = try tracker.windows()
+        #expect(access.windowListReadCount == 1)
+        try tracker.restoreWindow(windows[0].id)
+        #expect(access.windowListReadCount == 1)
     }
 
     @Test(arguments: [true, false])
@@ -88,21 +114,22 @@ struct AccessibilityWindowsTests {
         let original = try tracker.windows()
 
         access.currentWindows = [access.first]
+        #expect(try tracker.windows() == [original[0]])
+        let readsBeforeRestore = access.windowListReadCount
         #expect(throws: PeekabooError.self) { try tracker.restoreWindow(original[1].id) }
         #expect(access.restored == nil)
-        #expect(try tracker.windows() == [original[0]])
+        #expect(access.windowListReadCount == readsBeforeRestore)
         try tracker.restoreWindow(original[0].id)
         let restoredFirst = try #require(access.restored)
         #expect(CFEqual(restoredFirst, access.first))
     }
 }
 
-enum FocusFailure: CaseIterable {
+enum FocusFailure {
     case start
     case windows
     case focusedWindow
-    case windowListState
-    case focusedWindowState
+    case invalidWindowState
 }
 
 @MainActor
@@ -121,6 +148,7 @@ private final class FakeAccessibilityWindowAccess: AccessibilityWindowAccess {
     }
     private(set) var failureCount = 0
     private(set) var stopCount = 0
+    private(set) var windowListReadCount = 0
     private var minimizedReadCount = 0
     private var observeFocus: (@MainActor @Sendable () -> Void)?
 
@@ -145,6 +173,7 @@ private final class FakeAccessibilityWindowAccess: AccessibilityWindowAccess {
     func reportFocusChange() { observeFocus?() }
 
     func windows() throws -> [AXUIElement] {
+        windowListReadCount += 1
         try fail(at: .windows)
         return currentWindows
     }
@@ -154,10 +183,12 @@ private final class FakeAccessibilityWindowAccess: AccessibilityWindowAccess {
         return focused
     }
 
-    func isMinimized(_ window: AXUIElement) throws -> Bool {
+    func isMinimized(_ window: AXUIElement) throws -> Bool? {
         minimizedReadCount += 1
-        if minimizedReadCount == 2 { try fail(at: .windowListState) }
-        if minimizedReadCount == 3 { try fail(at: .focusedWindowState) }
+        if minimizedReadCount == 2, failure == .invalidWindowState {
+            failureCount += 1
+            return nil
+        }
         return minimized.contains { CFEqual($0, window) }
     }
 

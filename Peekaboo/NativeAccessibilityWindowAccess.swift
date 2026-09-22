@@ -79,8 +79,13 @@ final class NativeAccessibilityWindowAccess: AccessibilityWindowAccess {
         }
         var windows: [AXUIElement] = []
         for value in values {
-            let window = try element(value)
-            let subrole = try attribute(kAXSubroleAttribute, of: window, allowNoValue: true) as? String
+            guard let window = try element(value, allowInvalidUIElement: true) else { continue }
+            let subrole = try attribute(
+                kAXSubroleAttribute,
+                of: window,
+                allowNoValue: true,
+                allowInvalidUIElement: true
+            ) as? String
             guard subrole == kAXStandardWindowSubrole else { continue }
             windows.append(window)
         }
@@ -101,28 +106,42 @@ final class NativeAccessibilityWindowAccess: AccessibilityWindowAccess {
                   operation: "bring the selected window forward")
     }
 
-    func isMinimized(_ window: AXUIElement) throws -> Bool {
-        guard let value = try attribute(kAXMinimizedAttribute, of: window),
-              CFGetTypeID(value) == CFBooleanGetTypeID(), let minimized = value as? Bool else {
+    func isMinimized(_ window: AXUIElement) throws -> Bool? {
+        guard let value = try attribute(kAXMinimizedAttribute, of: window, allowInvalidUIElement: true) else {
+            return nil
+        }
+        guard CFGetTypeID(value) == CFBooleanGetTypeID(), let minimized = value as? Bool else {
             throw PeekabooError("The app returned an invalid minimized-window state.")
         }
         return minimized
     }
 
-    private func attribute(_ name: String, of element: AXUIElement, allowNoValue: Bool = false) throws -> CFTypeRef? {
+    private func attribute(
+        _ name: String,
+        of element: AXUIElement,
+        allowNoValue: Bool = false,
+        allowInvalidUIElement: Bool = false
+    ) throws -> CFTypeRef? {
         var value: CFTypeRef?
         let status = AXUIElementCopyAttributeValue(element, name as CFString, &value)
         if allowNoValue && status == .noValue { return nil }
+        if allowInvalidUIElement && Self.isClosedWindowError(status) { return nil }
         try check(status, operation: "read window information")
         return value
     }
 
-    private func element(_ value: CFTypeRef) throws -> AXUIElement {
+    static func isClosedWindowError(_ status: AXError) -> Bool {
+        status == .invalidUIElement
+    }
+
+    private func element(_ value: CFTypeRef, allowInvalidUIElement: Bool = false) throws -> AXUIElement? {
         guard CFGetTypeID(value) == AXUIElementGetTypeID() else {
             throw PeekabooError("The app returned an invalid Accessibility window.")
         }
         let element = unsafeDowncast(value, to: AXUIElement.self)
-        try check(AXUIElementSetMessagingTimeout(element, 0.25), operation: "set up window access")
+        let status = AXUIElementSetMessagingTimeout(element, 0.25)
+        if allowInvalidUIElement && Self.isClosedWindowError(status) { return nil }
+        try check(status, operation: "set up window access")
         return element
     }
 

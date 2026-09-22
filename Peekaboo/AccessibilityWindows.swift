@@ -9,7 +9,7 @@ protocol AccessibilityWindowAccess: AnyObject {
     func stop()
     func windows() throws -> [AXUIElement]
     func focusedWindow() throws -> AXUIElement?
-    func isMinimized(_ window: AXUIElement) throws -> Bool
+    func isMinimized(_ window: AXUIElement) throws -> Bool?
     func restoreWindow(_ window: AXUIElement) throws
 }
 
@@ -19,6 +19,11 @@ final class AccessibilityWindows {
         let id: UUID
         let element: AXUIElement
         var focusOrder: UInt64?
+    }
+
+    private struct WindowState {
+        let id: UUID
+        let isMinimized: Bool
     }
 
     private let access: any AccessibilityWindowAccess
@@ -35,13 +40,24 @@ final class AccessibilityWindows {
 
     func windows() throws -> [AppWindow] {
         try start()
-        if access.isActive { observeCurrentFocus() }
-        return try readWindows()
+        let states = try readWindows()
+        if access.isActive {
+            do { try recordCurrentFocus(in: states) }
+            catch {
+                // A missed focus update must not discard the readable window snapshot.
+            }
+        }
+        return states.map { state in
+            AppWindow(
+                id: state.id,
+                isMinimized: state.isMinimized,
+                focusOrder: knownWindows.first(where: { $0.id == state.id })?.focusOrder
+            )
+        }
     }
 
     func restoreWindow(_ id: UUID) throws {
         try start()
-        _ = try readWindows()
         guard let window = knownWindows.first(where: { $0.id == id }) else {
             throw PeekabooError("The selected window has closed. Try the shortcut again.")
         }
@@ -56,15 +72,8 @@ final class AccessibilityWindows {
         do {
             try start()
             guard access.isActive else { return }
-            _ = try readWindows()
-            guard let focused = try access.focusedWindow() else { return }
-            guard let index = knownWindows.firstIndex(where: { CFEqual($0.element, focused) }),
-                  try !access.isMinimized(focused) else { return }
-            guard nextFocusOrder < UInt64.max else {
-                throw PeekabooError("Window focus tracking is exhausted. Restart Peekaboo.")
-            }
-            nextFocusOrder += 1
-            knownWindows[index].focusOrder = nextFocusOrder
+            let states = try readWindows()
+            try recordCurrentFocus(in: states)
         } catch {
             // Keep the last observed order even if a focus change was missed.
             return
@@ -82,17 +91,29 @@ final class AccessibilityWindows {
         try access.start { [weak self] in self?.observeCurrentFocus() }
     }
 
-    private func readWindows() throws -> [AppWindow] {
+    private func readWindows() throws -> [WindowState] {
         var current: [Window] = []
-        var result: [AppWindow] = []
+        var states: [WindowState] = []
         for window in try access.windows() {
-            let minimized = try access.isMinimized(window)
             let known = knownWindows.first(where: { CFEqual($0.element, window) })
                 ?? Window(id: UUID(), element: window, focusOrder: nil)
             current.append(known)
-            result.append(AppWindow(id: known.id, isMinimized: minimized, focusOrder: known.focusOrder))
+            guard let minimized = try access.isMinimized(window) else { continue }
+            states.append(WindowState(id: known.id, isMinimized: minimized))
         }
         knownWindows = current
-        return result
+        return states
+    }
+
+    private func recordCurrentFocus(in states: [WindowState]) throws {
+        guard let focused = try access.focusedWindow(),
+              let index = knownWindows.firstIndex(where: { CFEqual($0.element, focused) }),
+              let state = states.first(where: { $0.id == knownWindows[index].id }),
+              !state.isMinimized else { return }
+        guard nextFocusOrder < UInt64.max else {
+            throw PeekabooError("Window focus tracking is exhausted. Restart Peekaboo.")
+        }
+        nextFocusOrder += 1
+        knownWindows[index].focusOrder = nextFocusOrder
     }
 }

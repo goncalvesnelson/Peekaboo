@@ -7,6 +7,11 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct NativeFlowTests {
+    @Test func onlyInvalidAccessibilityElementsAreTreatedAsClosedWindows() {
+        #expect(NativeAccessibilityWindowAccess.isClosedWindowError(.invalidUIElement))
+        #expect(!NativeAccessibilityWindowAccess.isClosedWindowError(.cannotComplete))
+    }
+
     @Test func settingsButtonBringsExistingWindowBackToFront() async throws {
         let menu = NSHostingMenu(rootView: SettingsButton())
         menu.update()
