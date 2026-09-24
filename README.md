@@ -25,6 +25,10 @@ Peekaboo pairs each app you choose with its own global hotkey. Press the shortcu
 
 One key combination opens your terminal, notes, music player, or chat app, and the same combination sends it away again. You don't need the Dock, ⌘Tab, or Spotlight.
 
+<p align="center">
+  <img src="docs/images/demo.gif" width="800" alt="Peekaboo demo: opening Settings from the menu bar, then pressing a global shortcut to bring the Ghostty terminal forward and hide it again">
+</p>
+
 > Not to be confused with [openclaw/Peekaboo](https://github.com/openclaw/Peekaboo), an unrelated macOS screenshot tool for AI agents.
 
 ## Features
