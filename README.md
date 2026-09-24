@@ -88,9 +88,10 @@ Launching, showing, and hiding apps work without extra permissions. To restore t
 
 ### macOS system shortcut conflicts
 
-Before saving, Peekaboo compares the recorded combination with the shortcuts enabled in macOS Keyboard Shortcuts, even when the combination is unchanged. If there is a match, a native warning offers **Cancel** and **Use Anyway**:
+Before saving, Peekaboo compares the recorded combination with the shortcuts enabled in macOS Keyboard Shortcuts, even when the combination is unchanged. If there is a match, a native warning offers **Cancel**, **Open Keyboard Shortcuts…**, and **Use Anyway**:
 
 - **Cancel** keeps the previous assignment.
+- **Open Keyboard Shortcuts…** also keeps the previous assignment and opens System Settings → Keyboard → Keyboard Shortcuts. macOS doesn't report which action owns a combination, so find it there, then record the shortcut again.
 - **Use Anyway** saves using the existing registration when the shortcut is unchanged and still registered. Otherwise, it attempts a native registration and saves only if that succeeds.
 
 If you leave the warning unanswered, the menu bar shows why its warning icon is displayed. If macOS can't report its shortcuts, Peekaboo says the check is unavailable and leaves the assignment unchanged. Record the shortcut again to retry.

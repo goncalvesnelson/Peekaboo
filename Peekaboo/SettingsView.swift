@@ -117,11 +117,17 @@ struct SettingsView: View {
             presenting: flow.systemShortcutConflict
         ) { _ in
             Button("Use Anyway") { flow.useConflictingShortcut() }
+            Button("Open Keyboard Shortcuts…") {
+                flow.cancelSystemShortcutConflict()
+                NSWorkspace.shared.open(Self.keyboardShortcutsURL)
+            }
             Button("Cancel", role: .cancel) { flow.cancelSystemShortcutConflict() }
         } message: { shortcut in
-            Text("\(shortcut.label) matches an enabled shortcut in macOS Keyboard Shortcuts. Peekaboo can try to use it, but macOS or another app may still intercept it even if registration succeeds.")
+            Text("\(shortcut.label) matches an enabled shortcut in macOS Keyboard Shortcuts. Peekaboo can try to use it, but macOS or another app may still intercept it even if registration succeeds. To see what uses it, open Keyboard Shortcuts, then record the shortcut again.")
         }
     }
+
+    private static let keyboardShortcutsURL = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts")!
 
     private func assignmentRow(_ assignment: Assignment) -> some View {
         let app = flow.replacingID == assignment.id ? flow.selectedApp ?? assignment.app : assignment.app
